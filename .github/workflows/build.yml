@@ -16,37 +16,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.6] # 2.7
+        python-version: [3.10] # specify more python versions here (i.e. 3.9)
         config:
         - {
             name: "Windows 64",
             os: windows-2019,
             arch: x64,
-          }
-        - {
-            name: "Windows 32",
-            os: windows-2019,
-            arch: Win32,
-          }
-        - {
-            name: "Ubuntu 18.04",
-            os: ubuntu-18.04,
-            arch: x64,
-          }
-        - {
-            name: "Ubuntu 20.04",
-            os: ubuntu-20.04,
-            arch: x64,
-          }
-        - {
-            name: "macOS 10.15",
-            os: macos-10.15,
-            arch: x64,
+            python-arch: x64,
           }
 
     steps:
     - name: Checkout
       uses: actions/checkout@v2
+
+    - name: Set up Python ${{ matrix.python-version }}
+      if: runner.os != 'Linux'
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+        architecture: ${{ matrix.config.python-arch }}
 
     - name:  Install Linux
       if: runner.os == 'Linux'
@@ -58,7 +46,7 @@ jobs:
     - name:  Install Windows
       if: runner.os == 'Windows'
       shell: cmd
-      run:   choco install -y swig --version 4.0.1
+      run:   choco install -y swig
 
     - name:  Install MacOS
       if: runner.os == 'macos'
@@ -101,7 +89,7 @@ jobs:
 
         cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DVSP_LIBRARY_PATH=$GITHUB_WORKSPACE\\buildlibs -A $BUILD_ARCH ..\\src
 
-        cmake --build . --target package --config Release -j 2 
+        cmake --build . --target package --config Release -j 2
 
         ZIPFILE=OpenVSP*.zip
         VSPVER=$(ls $ZIPFILE | awk 'BEGIN { FS = "-" } ; { print $2 }')
@@ -128,7 +116,7 @@ jobs:
         
         ZIPFILE=${GITHUB_WORKSPACE}/build/OpenVSP-*-MacOS.zip
         VSPVER=$(ls $ZIPFILE | awk 'BEGIN { FS = "-" } ; { print $2 }')
-        DEPLOY_FILE=${GITHUB_WORKSPACE}/build/OpenVSP-${VSPVER}-MacOS_${GITHUB_SHA}.zip
+        DEPLOY_FILE=${GITHUB_WORKSPACE}/build/OpenVSP-${VSPVER}-MacOS-Python${{ matrix.python-version }}_${GITHUB_SHA}.zip
         
         cp $ZIPFILE $DEPLOY_FILE
         cp $DEPLOY_FILE $GITHUB_WORKSPACE/artifacts
