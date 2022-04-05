@@ -56,6 +56,7 @@ private:
     GroupLayout m_PtLayout;
 
     // XSec editor area GUI elements
+    Choice m_ViewChoice;
     VSPGUI::EditXSecWindow* m_XSecGlWin;
     Ca_X_Axis* m_XAxis;
     Ca_Y_Axis* m_YAxis;
@@ -70,8 +71,10 @@ private:
 
     TriggerButton m_ReparameterizeButton;
 
-    SliderAdjRangeInput m_WidthSlider;
-    SliderAdjRangeInput m_HeightSlider;
+    HWXSecCurveDriverGroup m_DefaultXSecDriverGroup;
+    DriverGroupBank m_XSecDriverGroupBank;
+
+    SliderAdjRangeInput m_DepthSlider;
 
     SliderAdjRangeInput m_SplitPtSlider;
     TriggerButton m_SplitButton;
@@ -83,13 +86,14 @@ private:
     TriggerButton m_ConvertButton;
     StringOutput m_CurveType;
 
-    ToggleButton m_PreserveXSecARToggle;
     ToggleButton m_AbsDimToggle;
 
     // Draw Tab GUI Elements
     ColorPicker m_ColorPicker;
     SliderAdjRangeInput m_PointSizeSlider;
     SliderAdjRangeInput m_LineThicknessSlider;
+    CheckButton m_PointColorCheck;
+    SliderAdjRangeInput m_PointColorWheelSlider;
 
     ToggleButton m_BorderToggle;
     ToggleButton m_AxisToggle;
@@ -104,6 +108,7 @@ private:
     SliderAdjRangeInput m_ImageWScale;
     SliderAdjRangeInput m_ImageHScale;
     ToggleButton m_PreserveImageAspect;
+    ToggleButton m_FlipImageToggle;
 
     SliderAdjRangeInput m_ImageXOffset;
     SliderAdjRangeInput m_ImageYOffset;
@@ -120,7 +125,7 @@ private:
     DrawObj m_CurrentPntDrawObj;
 
     // Vector of sliders to match the curve parameter vectors
-    vector < vector < SliderAdjRangeInput > > m_SliderVecVec;
+    vector < vector < Input > > m_InputVecVec;
     vector < CheckButton > m_EnforceG1Vec;
     vector < CheckButton > m_FixedUCheckVec;
 

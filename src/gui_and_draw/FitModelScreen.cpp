@@ -82,17 +82,8 @@ FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 10
     m_PickPtsLayout.AddDividerBox( "Target Points" );
 
     // Pointer for the widths of each column in the browser to support resizing
-    int *target_col_widths = new int[8]; // 8 columns
-
-    // Initial column widths & keep the memory address
-    target_col_widths[0] = 90;
-    target_col_widths[1] = 42;
-    target_col_widths[2] = 42;
-    target_col_widths[3] = 42;
-    target_col_widths[4] = 42;
-    target_col_widths[5] = 42;
-    target_col_widths[6] = 42;
-    target_col_widths[7] = 50;
+    // Last column width must be 0
+    static int target_col_widths[] = { 90, 42, 42, 42, 42, 42, 42, 50, 0 }; // widths for each column
 
     int browser_h = 150;
     m_TargetPtBrowser = m_PickPtsLayout.AddColResizeBrowser( target_col_widths, 8, browser_h );
@@ -180,12 +171,8 @@ FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 10
     m_PickVarLayout.AddDividerBox( "Variable List" );
 
     // Pointer for the widths of each column in the browser to support resizing
-    int *var_col_widths = new int[3]; // 3 columns
-
-    // Initial column widths & keep the memory address
-    var_col_widths[0] = 120;
-    var_col_widths[1] = 160;
-    var_col_widths[2] = 120;
+    // Last column width must be 0
+    static int var_col_widths[] = { 120, 160, 120, 0 }; // widths for each column
 
     browser_h = 265;
     m_VarBrowser = m_PickVarLayout.AddColResizeBrowser( var_col_widths, 3, browser_h );
@@ -308,22 +295,26 @@ bool FitModelScreen::Update()
     int index;
     char str[256];
 
+    Vehicle * veh = VehicleMgr.GetVehicle();
+
     // Update the number of selected points.
     sprintf( str, "%d", FitModelMgr.GetNumSelected() );
     m_NSelOutput.Update( str );
 
     m_TargetGeomPicker.Update();
 
-    m_UToggleGroup.Update( FitModelMgr.m_UType.GetID() );
-    m_USlider.Update( FitModelMgr.m_UTargetPt.GetID() );
+    m_UToggleGroup.Update( veh->m_UType.GetID() );
+    m_USlider.Update( veh->m_UTargetPt.GetID() );
 
-    m_WToggleGroup.Update( FitModelMgr.m_WType.GetID() );
-    m_WSlider.Update( FitModelMgr.m_WTargetPt.GetID() );
+    m_WToggleGroup.Update( veh->m_WType.GetID() );
+    m_WSlider.Update( veh->m_WTargetPt.GetID() );
 
-    m_SelOneButton.Update( FitModelMgr.m_SelectOneFlag.GetID() );
-    m_SelBoxButton.Update( FitModelMgr.m_SelectBoxFlag.GetID() );
+    m_SelOneButton.Update( veh->m_SelectOneFlag.GetID() );
+    m_SelBoxButton.Update( veh->m_SelectBoxFlag.GetID() );
 
     // Update Fixed target point browser
+    int h_pos = m_TargetPtBrowser->hposition();
+    int v_pos = m_TargetPtBrowser->position();
     m_TargetPtBrowser->clear();
 
     m_TargetPtBrowser->column_char( ':' );         // use : as the column character
@@ -337,7 +328,7 @@ bool FitModelScreen::Update()
         TargetPt* tpt = FitModelMgr.GetTargetPt( i );
         if( tpt )
         {
-            Geom* g = VehicleMgr.GetVehicle()->FindGeom( tpt->GetMatchGeom() );
+            Geom* g = veh->FindGeom( tpt->GetMatchGeom() );
             if( g )
             {
                 string ut;
@@ -373,6 +364,9 @@ bool FitModelScreen::Update()
         m_TargetPtBrowser->select( index + 2 );
     }
 
+    m_TargetPtBrowser->hposition( h_pos );
+    m_TargetPtBrowser->position( v_pos );
+
     sprintf( str, "%d", num_fix );
     m_NTgtOutput.Update( str );
 
@@ -393,6 +387,8 @@ bool FitModelScreen::Update()
     m_ParmTreePicker.Update( FitModelMgr.GetVarVec() );
 
     //==== Update Parm Browser ====//
+    h_pos = m_VarBrowser->hposition();
+    v_pos = m_VarBrowser->position();
     m_VarBrowser->clear();
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
@@ -415,6 +411,9 @@ bool FitModelScreen::Update()
     {
         m_VarBrowser->select( index + 2 );
     }
+
+    m_VarBrowser->hposition( h_pos );
+    m_VarBrowser->position( v_pos );
 
     sprintf( str, "%d", num_vars );
     m_NVarOutput.Update( str );
@@ -517,6 +516,7 @@ void FitModelScreen::Hide()
 void FitModelScreen::CallBack( Fl_Widget* w )
 {
     assert( m_ScreenMgr );
+    Vehicle * veh = VehicleMgr.GetVehicle();
 
     if( Fl::event() == FL_PASTE || Fl::event() == FL_DND_RELEASE )
     {
@@ -531,11 +531,11 @@ void FitModelScreen::CallBack( Fl_Widget* w )
 
         if ( tpt )
         {
-            FitModelMgr.m_UType = tpt->GetUType();
-            FitModelMgr.m_WType = tpt->GetWType();
+            veh->m_UType = tpt->GetUType();
+            veh->m_WType = tpt->GetWType();
 
-            FitModelMgr.m_UTargetPt = tpt->GetUW().x();
-            FitModelMgr.m_WTargetPt = tpt->GetUW().y();
+            veh->m_UTargetPt = tpt->GetUW().x();
+            veh->m_WTargetPt = tpt->GetUW().y();
 
             m_TargetGeomPicker.SetGeomChoice( tpt->GetMatchGeom() );
         }

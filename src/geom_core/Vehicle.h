@@ -52,21 +52,6 @@
 #define NUM_SETS 20 // Number of sets
 #define DEFAULT_SET vsp::SET_TYPE::SET_SHOWN // Default set index
 
-/*!
-* Centralized place to access all GUI related Parm objects.
-*/
-class VehicleGuiDraw
-{
-public:
-    /*!
-    * Get Lights pointer.
-    */
-    static LightMgr * getLightMgr()
-    {
-        return LightMgr::getInstance();
-    }
-};
-
 //==== Vehicle ====//
 class Vehicle : public ParmContainer
 {
@@ -89,7 +74,7 @@ public:
     void UpdateGeom( const string &geom_id );
     void ForceUpdate( int dirtyflag = GeomBase::NONE );
     static void UpdateGui();
-    static void RunScript( const string & file_name, const string & function_name = "void main()" );
+    static int RunScript( const string & file_name, const string & function_name = "main" );
 
     Geom* FindGeom( const string & geom_id );
     vector< Geom* > FindGeomVec( const vector< string > & geom_id_vec );
@@ -97,7 +82,7 @@ public:
     string CreateGeom( const GeomType & type );
     string AddGeom( const GeomType & type );
     string AddGeom( Geom* add_geom );
-    string AddMeshGeom( int normal_set, int degen_set = vsp::SET_NONE );
+    string AddMeshGeom( int normal_set, int degen_set = vsp::SET_NONE, bool suppressdisks = false );
 
     virtual void AddLinkableContainers( vector< string > & linkable_container_vec );
 
@@ -193,24 +178,21 @@ public:
     string GetWriteScriptDir()                              { return m_CustomScriptDirs[0]; }
     vector < string > GetCustomScriptDirs()                 { return m_CustomScriptDirs; }
 
-    const VehicleGuiDraw * getVGuiDraw() const
-    {
-        return &m_VGuiDraw;
-    }
-
     //=== Export Files ===//
-    void ExportFile( const string & file_name, int write_set, int file_type );
+    // Return Mesh Geom ID if the export generates a mesh, otherwise return an 
+    // empty string. This facilitates deleting the generated mesh from the API.
+    string ExportFile( const string & file_name, int write_set, int degen_set, int file_type );
     bool WriteXMLFile( const string & file_name, int set );
     void WriteXSecFile( const string & file_name, int write_set );
     void WritePLOT3DFile( const string & file_name, int write_set );
-    void WriteSTLFile( const string & file_name, int write_set );
-    void WriteTaggedMSSTLFile( const string & file_name, int write_set );
-    void WriteFacetFile( const string & file_name, int write_set );
-    void WriteTRIFile( const string & file_name, int write_set );
-    void WriteOBJFile( const string & file_name, int write_set );
-    void WriteVSPGeomFile( const string & file_name, int write_set );
-    void WriteNascartFiles( const string & file_name, int write_set );
-    void WriteGmshFile( const string & file_name, int write_set );
+    string WriteSTLFile( const string & file_name, int write_set );
+    string WriteTaggedMSSTLFile( const string & file_name, int write_set );
+    string WriteFacetFile( const string & file_name, int write_set );
+    string WriteTRIFile( const string & file_name, int write_set );
+    string WriteOBJFile( const string & file_name, int write_set );
+    string WriteVSPGeomFile( const string & file_name, int write_set, int degen_set, bool half_flag = false, bool hideset = true, bool suppressdisks = false );
+    string WriteNascartFiles( const string & file_name, int write_set );
+    string WriteGmshFile( const string & file_name, int write_set );
     void WriteX3DFile( const string & file_name, int write_set );
     static void WriteX3DMaterial( xmlNodePtr node, Material * material );
     void WriteX3DViewpoints( xmlNodePtr node );
@@ -256,9 +238,7 @@ public:
     void resetExportFileNames();
 
     bool getExportCompGeomCsvFile()                    { return m_exportCompGeomCsvFile(); }
-    bool getExportDragBuildTsvFile()                   { return m_exportDragBuildTsvFile(); }
     void setExportCompGeomCsvFile( bool b )            { m_exportCompGeomCsvFile.Set( b ); }
-    void setExportDragBuildTsvFile( bool b )           { m_exportDragBuildTsvFile.Set( b ); }
 
     bool getExportDegenGeomCsvFile( )                  { return m_exportDegenGeomCsvFile(); }
     bool getExportDegenGeomMFile( )                    { return m_exportDegenGeomMFile(); }
@@ -271,8 +251,8 @@ public:
     string ImportV2File( const string & file_name );
 
     //Comp Geom
-    string CompGeom( int set, int degenset, int halfFlag, int intSubsFlag = 1 );
-    string CompGeomAndFlatten( int set, int halfFlag, int intSubsFlag = 1, int degenset = vsp::SET_NONE );
+    string CompGeom( int set, int degenset, int halfFlag, int intSubsFlag = 1, bool hideset = true, bool suppressdisks = false );
+    string CompGeomAndFlatten( int set, int halfFlag, int intSubsFlag = 1, int degenset = vsp::SET_NONE, bool hideset = true, bool suppressdisks = false );
     string MassProps( int set, int numSlices, bool hidegeom = true, bool writefile = true );
     string MassPropsAndFlatten( int set, int numSlices, bool hidegeom = true, bool writefile = true );
     string PSlice( int set, int numSlices, vec3d norm, bool autoBoundsFlag, double start = 0, double end = 0 );
@@ -437,6 +417,55 @@ public:
     IntParm m_SVGView3_rot;
     IntParm m_SVGView4_rot;
 
+    // DesignVarMgr
+    IntParm m_WorkingXDDMType;
+
+    // FitModelMgr
+    BoolParm m_SelectOneFlag;
+    BoolParm m_SelectBoxFlag;
+    IntParm m_UType;
+    IntParm m_WType;
+    Parm m_UTargetPt;
+    Parm m_WTargetPt;
+
+    // ProjectionMgr
+    IntParm m_TargetType;
+    IntParm m_BoundaryType;
+    IntParm m_DirectionType;
+    Parm m_XComp;
+    Parm m_YComp;
+    Parm m_ZComp;
+
+    // ManageViewScreen
+    IntParm m_ViewportSizeXValue;
+    IntParm m_ViewportSizeYValue;
+    Parm m_CORXValue;
+    Parm m_CORYValue;
+    Parm m_CORZValue;
+    Parm m_PanXPosValue;
+    Parm m_PanYPosValue;
+    Parm m_ZoomValue;
+    Parm m_XRotationValue;
+    Parm m_YRotationValue;
+    Parm m_ZRotationValue;
+
+    // ScreenshotScreen
+    FractionParm m_NewRatioValue;
+    IntParm m_NewWidthValue;
+    IntParm m_NewHeightValue;
+    BoolParm m_TransparentBGFlag;
+
+    // UserParmScreen
+    Parm m_UserParmVal;
+    Parm m_UserParmMin;
+    Parm m_UserParmMax;
+
+    // ManageBackgroundScreen
+    FractionParm m_BGWidthScaleValue;
+    FractionParm m_BGHeightScaleValue;
+    FractionParm m_BGXOffsetValue;
+    FractionParm m_BGYOffsetValue;
+
     string m_BEMPropID;
 
     IntParm m_AFExportType;
@@ -448,7 +477,6 @@ public:
     BoolParm m_STLExportPropMainSurf;
 
     BoolParm m_exportCompGeomCsvFile;
-    BoolParm m_exportDragBuildTsvFile;
     BoolParm m_exportDegenGeomCsvFile;
     BoolParm m_exportDegenGeomMFile;
 
@@ -509,8 +537,6 @@ protected:
 
     ClippingMgr m_ClippingMgr;
     SnapTo m_SnapTo;
-
-    VehicleGuiDraw m_VGuiDraw;
 
     // Class to handle group transformations
     GroupTransformations m_GroupTransformations;

@@ -775,7 +775,7 @@ void ISegChain::Intersect( Surf* surfPtr, ISegChain* B )
 void ISegChain::AddSplit( Surf* surfPtr, int index, vec2d int_pnt )
 {
     //jrg 9/27
-    //==== Check if chain allready has a point there =====//
+    //==== Check if chain already has a point there =====//
     //double tol = 0.00001;
     //if ( surfPtr == m_SurfA )
     //{
@@ -921,6 +921,12 @@ bool ISegChain::AddBorderSplit( Puw* uw )
 //}
 
 
+// When splitting intersection chains (IntersectSplitChains) or border curves (SplitBorderCurves), compound
+// intersections can lead to identified split points that are separate, but should be coincident.  MergeSplits
+// identifies these splits and merges them.
+// Coincident splits are identified with a dimensional (model XYZ) tolerance.  This tolerance could likely be much
+// larger than it is as it is really a search radius.  We do not expect false positives to be very close at all.
+// When done, the first split identified of each group is used.  No averaging or smearing is currently performed.
 void ISegChain::MergeSplits()
 {
     int i, j;

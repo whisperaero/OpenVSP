@@ -18,7 +18,7 @@
 #include "StlHelper.h"
 #include "PntNodeMerge.h"
 #include "Cluster.h"
-#include "Util.h"
+#include "VspUtil.h"
 
 #include "eli/geom/surface/piecewise_body_of_revolution_creator.hpp"
 #include "eli/geom/surface/piecewise_multicap_surface_creator.hpp"
@@ -74,7 +74,7 @@ void VspSurf::SetClustering( const double &le, const double &te )
     m_TECluster = te;
 }
 
-void VspSurf::SetRootTipClustering( const vector < double > &root, const vector < double > &tip )
+void VspSurf::SetRootTipClustering( const vector < double > &root, const vector < double > &tip ) const
 {
     m_RootCluster = root;
     m_TipCluster = tip;
@@ -445,7 +445,7 @@ void VspSurf::CreateBodyRevolution( const VspCurve &input_crv, bool match_uparm 
     ResetFlipNormal();
     ResetUSkip();
 
-    //==== Store Skining Data ====//
+    //==== Store Skinning Data ====//
     m_SkinType = SKIN_BODY_REV;
     m_BodyRevCurve = input_crv;
 }
@@ -552,7 +552,7 @@ void VspSurf::SkinRibs( const vector<rib_data_type> &ribs, const vector < int > 
     ResetFlipNormal();
     ResetUSkip();
 
-    //==== Store Skining Data ====//
+    //==== Store Skinning Data ====//
     m_SkinType = SKIN_RIBS;
     m_SkinRibVec = ribs;
     m_SkinDegreeVec = degree;
@@ -1003,9 +1003,9 @@ void VspSurf::CompCurvature01( double u01, double v01, double& k1, double& k2, d
     CompCurvature( u01 * GetUMax(), v01 * GetWMax(), k1, k2, ka, kg );
 }
 
-void VspSurf::ResetUSkip()
+void VspSurf::ResetUSkip() const
 {
-    piecewise_surface_type::index_type ip, jp, nupatch, nwpatch;
+    piecewise_surface_type::index_type ip, nupatch, nwpatch;
 
     nupatch = m_Surface.number_u_patches();
     nwpatch = m_Surface.number_v_patches();
@@ -1039,7 +1039,7 @@ void VspSurf::SetUSkipLast( bool f )
     }
 }
 
-void VspSurf::FlagDuplicate( VspSurf *othersurf )
+void VspSurf::FlagDuplicate( const VspSurf &othersurf ) const
 {
     piecewise_surface_type::index_type ip, jp, nupatch, nvpatch;
 
@@ -1056,8 +1056,8 @@ void VspSurf::FlagDuplicate( VspSurf *othersurf )
         for( jp = 0; jp < nvpatch; ++jp )
         {
 
-            surface_patch_type *patch = m_Surface.get_patch( ip, jp );
-            surface_patch_type *otherpatch = othersurf->m_Surface.get_patch( ip, jp );
+            const surface_patch_type * patch = m_Surface.get_patch( ip, jp );
+            const surface_patch_type * otherpatch = othersurf.m_Surface.get_patch( ip, jp );
 
             if ( patch->abouteq( *otherpatch, tol ) )
             {
@@ -1077,7 +1077,7 @@ void VspSurf::FlagDuplicate( VspSurf *othersurf )
         if ( umatchcnt[ip] == nvpatch )
         {
             m_USkip[ip] = true;
-            othersurf->m_USkip[ip] = true;
+            othersurf.m_USkip[ip] = true;
         }
     }
 
@@ -1320,7 +1320,7 @@ void VspSurf::MakeVTess( int num_v, std::vector<double> &vtess, const int &n_cap
         }
         if ( degen )
         {
-            vtess[j] = vabsmax;
+            vtess[ nv - 1 ] = vabsmax;
         }
 
         if ( degen ) // DegenGeom, don't tessellate blunt TE or LE.
@@ -1452,8 +1452,14 @@ void VspSurf::SplitTesselate( const vector<int> &num_u, int num_v, std::vector< 
 // Also called by SplitTess below.
 void VspSurf::Tesselate( const vector<double> &u, const vector<double> &v, std::vector< vector< vec3d > > & pnts,  std::vector< vector< vec3d > > & norms,  std::vector< vector< vec3d > > & uw_pnts ) const
 {
-    unsigned int nu = u.size();
-    unsigned int nv = v.size();
+    if ( u.size() == 0 || v.size() == 0 )
+    {
+        printf( "ERROR: Empty U or V vectors \n\tFile: %s \tLine:%d\n", __FILE__, __LINE__ );
+        return;
+    }
+
+    unsigned int nu = (unsigned int)u.size();
+    unsigned int nv = (unsigned int)v.size();
 
     vector < vector < surface_point_type > > ptmat, nmat;
 
@@ -1516,6 +1522,11 @@ void VspSurf::Tesselate( const vector<double> &u, const vector<double> &v, std::
 // Splits at split lines, returning 3D vectors of results for patches.
 void VspSurf::SplitTesselate( const vector<double> &usplit, const vector<double> &vsplit, const vector<double> &u, const vector<double> &v, std::vector< vector< vector< vec3d > > > & pnts,  std::vector< vector< vector< vec3d > > > & norms ) const
 {
+    if ( usplit.size() == 0 || vsplit.size() == 0 )
+    {
+        printf( "ERROR: Empty U or V split \n\tFile: %s \tLine:%d\n", __FILE__, __LINE__ );
+        return;
+    }
     vector < int > iusplit;
     iusplit.resize( usplit.size() );
 
@@ -1587,7 +1598,7 @@ void VspSurf::SplitTesselate( const vector<double> &usplit, const vector<double>
     }
 }
 
-void VspSurf::TessUFeatureLine( int iu, std::vector< vec3d > & pnts, double tol )
+void VspSurf::TessUFeatureLine( int iu, std::vector< vec3d > & pnts, double tol ) const
 {
     double u = m_UFeature[ iu ];
 
@@ -1613,7 +1624,7 @@ void VspSurf::TessUFeatureLine( int iu, std::vector< vec3d > & pnts, double tol 
     pnts.push_back( pmax );
 }
 
-void VspSurf::TessWFeatureLine( int iw, std::vector< vec3d > & pnts, double tol )
+void VspSurf::TessWFeatureLine( int iw, std::vector< vec3d > & pnts, double tol ) const
 {
     double v = m_WFeature[ iw ];
 
@@ -1642,7 +1653,7 @@ void VspSurf::TessWFeatureLine( int iw, std::vector< vec3d > & pnts, double tol 
     pnts.push_back( pmax );
 }
 
-void VspSurf::TessAdaptLine( double umin, double umax, double wmin, double wmax, std::vector< vec3d > & pnts, double tol, int Nlimit )
+void VspSurf::TessAdaptLine( double umin, double umax, double wmin, double wmax, std::vector< vec3d > & pnts, double tol, int Nlimit ) const
 {
     vec3d pmin = CompPnt( umin, wmin );
     vec3d pmax = CompPnt( umax, wmax );
@@ -1652,7 +1663,7 @@ void VspSurf::TessAdaptLine( double umin, double umax, double wmin, double wmax,
     pnts.push_back( pmax );
 }
 
-void VspSurf::TessAdaptLine( double umin, double umax, double wmin, double wmax, const vec3d & pmin, const vec3d & pmax, std::vector< vec3d > & pnts, double tol, int Nlimit, int Nadapt )
+void VspSurf::TessAdaptLine( double umin, double umax, double wmin, double wmax, const vec3d & pmin, const vec3d & pmax, std::vector< vec3d > & pnts, double tol, int Nlimit, int Nadapt ) const
 {
     double umid = ( umin + umax ) * 0.5;
     double wmid = ( wmin + wmax ) * 0.5;
@@ -1871,7 +1882,7 @@ bool VspSurf::CapWMax(int CapType)
     return false;
 }
 
-void VspSurf::SplitSurfs( vector< piecewise_surface_type > &surfvec, const vector < double > &usuppress, const vector < double > &wsuppress )
+void VspSurf::SplitSurfs( vector< piecewise_surface_type > &surfvec, const vector < double > &usuppress, const vector < double > &wsuppress ) const
 {
     vector < double > usplits = m_UFeature;
     vector < double > wsplits = m_WFeature;
@@ -1883,7 +1894,7 @@ void VspSurf::SplitSurfs( vector< piecewise_surface_type > &surfvec, const vecto
     SplitSurfsW( surfvec, wsplits );
 }
 
-void VspSurf::SplitSurfs( vector< piecewise_surface_type > &surfvec )
+void VspSurf::SplitSurfs( vector< piecewise_surface_type > &surfvec ) const
 {
     SplitSurfsU( surfvec, m_UFeature );
     SplitSurfsW( surfvec, m_WFeature );
@@ -2015,7 +2026,7 @@ bool VspSurf::CheckValidPatch( const piecewise_surface_type &surf )
     return true;
 }
 
-void VspSurf::FetchXFerSurf( const std::string &geom_id, int surf_ind, int comp_ind, vector< XferSurf > &xfersurfs, const vector < double > &usuppress, const vector < double > &wsuppress )
+void VspSurf::FetchXFerSurf( const std::string &geom_id, int surf_ind, int comp_ind, vector< XferSurf > &xfersurfs, const vector < double > &usuppress, const vector < double > &wsuppress ) const
 {
     vector < piecewise_surface_type > surfvec;
     surfvec.push_back( m_Surface );
@@ -2045,7 +2056,7 @@ void VspSurf::FetchXFerSurf( const std::string &geom_id, int surf_ind, int comp_
     }
 }
 
-void VspSurf::ToSTEP_BSpline_Quilt( STEPutil * step, vector<SdaiB_spline_surface_with_knots *> &surfs, const string& label, bool splitsurf, bool mergepts, bool tocubic, double tol, bool trimte, const vector < double > &USplit, const vector < double > &WSplit )
+void VspSurf::ToSTEP_BSpline_Quilt( STEPutil * step, vector<SdaiB_spline_surface_with_knots *> &surfs, const string& label, bool splitsurf, bool mergepts, bool tocubic, double tol, bool trimte, const vector < double > &USplit, const vector < double > &WSplit ) const
 {
     vector < piecewise_surface_type > surfvec = PrepCADSurfs( splitsurf, tocubic, tol, trimte, USplit, WSplit );
 
@@ -2081,7 +2092,7 @@ void VspSurf::ToSTEP_BSpline_Quilt( STEPutil * step, vector<SdaiB_spline_surface
     }
 }
 
-void VspSurf::ToIGES( IGESutil* iges, bool splitsurf, bool tocubic, double tol, bool trimTE, const vector < double > &USplit, const vector < double > &WSplit, const string &labelprefix, bool labelSplitNo, const string &delim )
+void VspSurf::ToIGES( IGESutil* iges, bool splitsurf, bool tocubic, double tol, bool trimTE, const vector < double > &USplit, const vector < double > &WSplit, const string &labelprefix, bool labelSplitNo, const string &delim ) const
 {
     vector < piecewise_surface_type > surfvec = PrepCADSurfs( splitsurf, tocubic, tol, trimTE, USplit, WSplit );
 
@@ -2115,7 +2126,7 @@ void VspSurf::ToIGES( IGESutil* iges, bool splitsurf, bool tocubic, double tol, 
     }
 }
 
-vector < piecewise_surface_type > VspSurf::PrepCADSurfs( bool splitsurf, bool tocubic, double tol, bool trimTE, const vector < double >& USplit, const vector < double >& WSplit )
+vector < piecewise_surface_type > VspSurf::PrepCADSurfs( bool splitsurf, bool tocubic, double tol, bool trimTE, const vector < double >& USplit, const vector < double >& WSplit ) const
 {
     // Make copy for local changes.
     piecewise_surface_type s( m_Surface );

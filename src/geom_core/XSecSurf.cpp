@@ -53,7 +53,7 @@ void XSecSurf::ChangeID( string id )
 }
 
 //==== Find XSec Given ID ====//
-XSec* XSecSurf::FindXSec( string id )
+XSec* XSecSurf::FindXSec( string id ) const
 {
     for ( int i = 0 ; i < ( int )m_XSecPtrVec.size() ; i++ )
     {
@@ -65,15 +65,25 @@ XSec* XSecSurf::FindXSec( string id )
     return NULL;
 }
 
+const XSec* XSecSurf::FindConstXSec( string id ) const
+{
+    return FindXSec( id );
+}
+
 //==== Find XSec Given Index ====//
-XSec* XSecSurf::FindXSec( int index )
+XSec* XSecSurf::FindXSec( int index ) const
 {
     string id = GetXSecID( index );
     return FindXSec( id );
 }
 
+const XSec* XSecSurf::FindConstXSec( int index ) const
+{
+    return FindXSec( index );
+}
+
 //==== Find XSec Index Given ID ====//
-int XSecSurf::FindXSecIndex( string ID )
+int XSecSurf::FindXSecIndex( string ID ) const
 {
     for( int i = 0; i < static_cast<int>( m_XSecIDDeque.size() ); i++ )
     {
@@ -86,7 +96,7 @@ int XSecSurf::FindXSecIndex( string ID )
 }
 
 //==== Find XSec ID Given Index ====//
-string XSecSurf::GetXSecID( int index )
+string XSecSurf::GetXSecID( int index ) const
 {
     string id;
     if ( index >= 0 && index < ( int )m_XSecIDDeque.size() )
@@ -300,16 +310,11 @@ void XSecSurf::CutXSec( int index )
         return;
     }
 
-    //==== Delete Saved XSec ====//
-    XSec* saved_xs = FindXSec( m_SavedXSec );
-    if ( saved_xs )
-    {
-        vector_remove_val( m_XSecPtrVec, saved_xs );
-        delete saved_xs;
-    }
+    CopyXSec( index );
 
-    m_SavedXSec = xs->GetID();
+    vector_remove_val( m_XSecPtrVec, xs );
     m_XSecIDDeque.erase( m_XSecIDDeque.begin() + index );
+    delete xs;
 }
 
 //==== Copy XSec ====//
@@ -452,6 +457,13 @@ void XSecSurf::ChangeXSecShape( int index, int type )
         m_XSecIDDeque.erase( m_XSecIDDeque.begin() + index + 1 );
         vector_remove_val( m_XSecPtrVec, xs );
         delete xs;
+        
+        XSecCurve* xsc = nxs->GetXSecCurve();
+
+        if ( xsc )
+        {
+            xsc->Update();
+        }
     }
 }
 
@@ -625,7 +637,7 @@ void XSecSurf::AddLinkableParms( vector< string > & parm_vec, const string & lin
     }
 }
 
-string XSecSurf::GetName()
+string XSecSurf::GetName() const
 {
     ParmContainer* pc = GetParentContainerPtr();
 

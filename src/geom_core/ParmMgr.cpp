@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "ParmMgr.h"
+#include "VspUtil.h"
 
 using std::map;
 using std::string;
@@ -21,6 +22,7 @@ ParmMgrSingleton::ParmMgrSingleton()
     m_ChangeCnt = 0;
     m_LastUndoFlag = false;
     m_LastReset = "";
+    m_DirtyFlag = true;
 }
 
 //==== Add Parm To Map ====//
@@ -47,6 +49,8 @@ bool ParmMgrSingleton::AddParm( Parm* p  )
     m_NumParmChanges++;
     m_ParmMap[id] = p;
 
+    m_DirtyFlag = true;
+
     return true;
 }
 
@@ -61,6 +65,8 @@ void ParmMgrSingleton::RemoveParm( Parm* p  )
         m_NumParmChanges++;
         m_ParmMap.erase( iter );
     }
+
+    m_DirtyFlag = true;
 }
 
 //==== Add Parm Container To Map ====//
@@ -71,6 +77,8 @@ void ParmMgrSingleton::AddParmContainer( ParmContainer* pc  )
         m_NumParmChanges++;
         m_ParmContainerMap[pc->GetID()] = pc;
     }
+
+    m_DirtyFlag = true;
 }
 
 //==== Remove Parm Container From Map ====//
@@ -84,6 +92,8 @@ void ParmMgrSingleton::RemoveParmContainer( ParmContainer* pc  )
         m_NumParmChanges++;
         m_ParmContainerMap.erase( iter );
     }
+
+    m_DirtyFlag = true;
 }
 
 //==== Find Parm GivenID ====//
@@ -174,27 +184,6 @@ void ParmMgrSingleton::UnDo()
     }
 }
 
-//==== Create A Unique ID  =====//
-string ParmMgrSingleton::GenerateID( int length )
-{
-    static bool seed = false;
-    if ( !seed )
-    {
-        seed = true;
-        srand( ( unsigned int )time( NULL ) );
-    }
-
-    static char str[256];
-    for ( int i = 0 ; i < length ; i++ )
-    {
-        str[i] = ( char )( ( rand() % 26 ) + 65 );
-    }
-    string id( str, length );
-
-    return id;
-}
-
-
 //==== Remap oldID into newID avoiding collisions ====//
 
 // RemapID will map an old set of ID's to a new set of ID's.
@@ -247,7 +236,7 @@ string ParmMgrSingleton::RemapID( const string & oldID, const string & suggestID
         {
             if ( size != -1 )
             {
-                newID = GenerateID( size );                 //  generate new.
+                newID = GenerateRandomID( size );                 //  generate new.
             }
             else if ( suggestID.compare( "" ) != 0 )        //  suggestion provided
             {
@@ -255,7 +244,7 @@ string ParmMgrSingleton::RemapID( const string & oldID, const string & suggestID
             }
             else
             {
-                newID = GenerateID( oldID.size() );    //  generate new.
+                newID = GenerateRandomID( oldID.size() );    //  generate new.
             }
         }
 
@@ -280,7 +269,7 @@ string ParmMgrSingleton::ResetRemapID( const string & lastReset )
 
     m_IDRemap.clear();
 
-    m_LastReset = GenerateID( 3 );
+    m_LastReset = GenerateRandomID( 3 );
     return m_LastReset;
 }
 

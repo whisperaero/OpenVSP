@@ -6,6 +6,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "GroupLayout.h"
+#include "ScreenBase.h"
 #include <FL/Fl_Value_Slider.H>
 
 //==== Constructor ====//
@@ -60,6 +61,11 @@ void GroupLayout::InitWidthHeightVals()
 //==== Destructor ====//
 GroupLayout::~GroupLayout()
 {
+    for ( int i = 0; i < m_Slider_Cleanup.size(); i++ )
+    {
+        delete m_Slider_Cleanup[i];
+    }
+    m_Slider_Cleanup.clear();
 }
 
 //==== Hide Group ====//
@@ -864,6 +870,11 @@ void GroupLayout::AddInput( Input& input, const char* label, const char* format 
     NewLineX();
 
     input.Init( m_Screen, flinput, format, button );
+
+    if( strcmp( label, "AUTO_UPDATE" ) == 0 || strcmp( label, "" ) == 0 )
+    {
+        input.SetButtonNameUpdate( true );
+    }
 }
 
 void GroupLayout::AddInputEvenSpacedVector(Input& start_input, Input& end_input, Input& npts_input,const char * label,const char * format)
@@ -1277,6 +1288,7 @@ void GroupLayout::AddDriverGroupBank( DriverGroupBank & dgBank, const vector < s
         AddX( 1 );
 
         sliders[i] = new SliderAdjRangeInput();
+        m_Slider_Cleanup.push_back( sliders[i] );
         AddSlider( *sliders[i], labels[i].c_str(), range, format );
 
         ForceNewLine();
@@ -1351,7 +1363,14 @@ void GroupLayout::AddSkinControl( SkinControl & skin_control, const char* label,
     AddX( m_StdHeight );
 
     //==== Parm Button ====//
-    VspButton* parm_button = AddParmButton( label );
+    int originalWidth = m_ButtonWidth;
+    int rightWidth = 12;
+    int leftWidth = originalWidth - rightWidth;
+    SetButtonWidth(leftWidth);
+    VspButton* parm_button_L = AddParmButton( label );
+    SetButtonWidth(rightWidth);
+    VspButton* parm_button_R = AddParmButton( "" );
+    SetButtonWidth(originalWidth);
 
     //==== Set Equality Check Button ====//
     Fl_Check_Button* setButtonEqual = new Fl_Check_Button( m_X, m_Y, m_StdHeight, m_StdHeight );
@@ -1412,7 +1431,8 @@ void GroupLayout::AddSkinControl( SkinControl & skin_control, const char* label,
         maxbuttonR,
         inputL,
         inputR,
-        parm_button,
+        parm_button_L,
+        parm_button_R,
         range, format);
 }
 
@@ -1665,6 +1685,29 @@ Fl_Browser* GroupLayout::AddFlBrowser( int height )
 ColResizeBrowser* GroupLayout::AddColResizeBrowser( int* width_array_ptr, size_t num_col, int height )
 {
     assert( m_Group && m_Screen && width_array_ptr );
+
+    if ( width_array_ptr[num_col] != 0 )
+    {
+        printf( "Error:  Column width array not zero terminated or column length mismatch: ");
+
+        BasicScreen *bs = dynamic_cast< BasicScreen* >( m_Screen );
+        if ( bs )
+        {
+            printf( " %s", bs->GetTitle().c_str() );
+        }
+
+        Fl_Group *g = m_Group;
+        while( g )
+        {
+            if( g->label() )
+            {
+                printf( " %s", g->label() );
+            }
+
+            g = g->parent();
+        }
+        printf( "\n" );
+    }
 
     ColResizeBrowser* browser = new ColResizeBrowser( m_X, m_Y, m_W, height );
     browser->type( FL_MULTI_BROWSER );

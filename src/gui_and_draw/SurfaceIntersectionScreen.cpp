@@ -50,6 +50,8 @@ SurfaceIntersectionScreen::SurfaceIntersectionScreen( ScreenMgr* mgr ) : TabScre
 
 SurfaceIntersectionScreen::~SurfaceIntersectionScreen()
 {
+    m_ConsoleDisplay->buffer( NULL );
+    delete m_ConsoleBuffer;
 }
 
 void SurfaceIntersectionScreen::CreateGlobalTab()
@@ -190,7 +192,7 @@ void SurfaceIntersectionScreen::CreateOutputTab()
     m_LabelDelimChoice.AddItem( "Underscore" );
     m_LabelDelimChoice.AddItem( "Space" );
     m_LabelDelimChoice.AddItem( "None" );
-    m_OutputTabLayout.AddChoice( m_LabelDelimChoice, "Delimeter" );
+    m_OutputTabLayout.AddChoice( m_LabelDelimChoice, "Delimiter" );
 
     m_LenUnitChoice.AddItem( "MM" );
     m_LenUnitChoice.AddItem( "CM" );

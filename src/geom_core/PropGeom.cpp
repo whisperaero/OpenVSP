@@ -41,6 +41,8 @@ PropPositioner::PropPositioner()
     m_Feather = 0.0;
     m_ZRotate = 0.0;
 
+    m_CurveSection = false;
+
     m_Radius = 0.0;
     m_Rake = 0.0;
     m_Skew = 0.0;
@@ -85,19 +87,8 @@ void PropPositioner::Update()
 
     mat.loadIdentity();
 
-    // Propeller rotation first because order is reversed.
-    mat.rotateX( -m_Reverse * m_PropRot );
 
-    mat.rotateZ( m_Precone );
-
-    mat.translatef( m_FoldOrigin.x(), m_FoldOrigin.y(), m_FoldOrigin.z() );
-    mat.rotate( m_FoldAngle * PI / 180.0, m_FoldDirection );
-    mat.translatef( -m_FoldOrigin.x(), -m_FoldOrigin.y(), -m_FoldOrigin.z() );
-
-
-    mat.translatef( 0, 0, m_RootChord * m_FeatherOffset );
-
-    mat.rotateY( m_Reverse * m_Feather );
+    // Position section for prop shaping.
 
     double xb = m_RootChord * ( 0.5 - m_FeatherAxis );
     mat.translatef( xb * sin( m_RootTwist * PI / 180.0), 0, m_Reverse * xb * cos( m_RootTwist * PI / 180.0) );
@@ -118,6 +109,31 @@ void PropPositioner::Update()
     mat.rotateZ( m_ZRotate ); // About chord
 
     mat.translatef( 0, 0, m_Reverse * m_Chord * ( 0.5 - m_Construct ) );
+
+    m_TransformedCurve.Transform( mat );
+
+    // Project prop curve onto cylinder surface in current location.  After blade lofting,
+    // but before rigid body motion positioning.
+    if ( m_CurveSection )
+    {
+        m_TransformedCurve.ProjectOntoCylinder( m_Radius, true, 1e-6 * m_Chord );
+    }
+
+    mat.loadIdentity();  // Reset to handle rigid body motion of lofted prop sections.
+
+    // Propeller rotation first because order is reversed.
+    mat.rotateX( -m_Reverse * m_PropRot );
+
+    mat.rotateZ( m_Precone );
+
+    mat.translatef( m_FoldOrigin.x(), m_FoldOrigin.y(), m_FoldOrigin.z() );
+    mat.rotate( m_FoldAngle * PI / 180.0, m_FoldDirection );
+    mat.translatef( -m_FoldOrigin.x(), -m_FoldOrigin.y(), -m_FoldOrigin.z() );
+
+
+    mat.translatef( 0, 0, m_RootChord * m_FeatherOffset );
+
+    mat.rotateY( m_Reverse * m_Feather );
 
     m_TransformedCurve.Transform( mat );
 }
@@ -291,6 +307,9 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_ReverseFlag.Init( "ReverseFlag", "Design", this, false, 0, 1 );
     m_ReverseFlag.SetDescript( "Flag to reverse propeller rotation direction" );
 
+    m_CylindricalSectionsFlag.Init( "CylindricalSectionsFlag", "Design", this, false, 0, 1 );
+    m_CylindricalSectionsFlag.SetDescript( "Flag to project airfoil sections onto cylinder of rotation" );
+
     m_AFLimit.Init( "AFLimit", "Design", this, 0.2, 0, 1 );
     m_AFLimit.SetDescript( "Lower limit of activity factor integration" );
 
@@ -386,6 +405,12 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     vector < double > tv1( t1, t1 + sizeof( t1 ) / sizeof( t1[0] ) );
     vector < double > vv1( v1, v1 + sizeof( v1 ) / sizeof( v1[0] ) );
     m_ChordCurve.InitCurve( tv1, vv1 );
+
+    // Prevent negative values in m_Chord
+    for ( size_t i = 0; i < m_ChordCurve.m_ValParmVec.size(); i++ )
+    {
+        m_ChordCurve.m_ValParmVec[i]->SetLowerLimit( 1e-8 );
+    }
 
     m_TwistCurve.SetParentContainer( GetID() );
     m_TwistCurve.SetDispNames( "r/R", "Twist" );
@@ -507,58 +532,68 @@ void PropGeom::UpdateDrawObj()
     m_ArrowLinesDO.m_PntVec.clear();
     m_ArrowHeadDO.m_PntVec.clear();
 
-    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    double axlen = 1.0;
+
+    Vehicle *veh = VehicleMgr.GetVehicle();
+    if ( veh )
     {
-        double axlen = 1.0;
+        axlen = veh->m_AxisLength();
+    }
 
-        Vehicle *veh = VehicleMgr.GetVehicle();
-        if ( veh )
-        {
-            axlen = veh->m_AxisLength();
-        }
-
-        double rev = 1.0;
-        if ( m_ReverseFlag() )
-        {
-            rev = -1.0;
-        }
-
+    for ( int i = 0; i < GetNumSymmCopies(); i++)
+    {
         double data[16];
         m_ModelMatrix.getMat( data );
+
+        Matrix4d trans_mat = m_TransMatVec[i * GetNumMainSurfs()]; // Translations for the specific symmetric copy
 
         vec3d cen( 0, 0, 0 );
         vec3d rotdir( -1, 0, 0 );
         vec3d thrustdir( -1, 0, 0 );
+
+        double rev = 1.0;
+        if ( !m_FlipNormalVec[i * GetNumMainSurfs()] )
+        {
+            // Note inverse of m_FipNormalVec is used because Props are flipped by 
+            // default (m_XSecSurf.GetFlipUD() in UpdateSurf())
+            rev = -1.0;
+        }
+
         rotdir = rotdir * rev;
 
-        cen = m_ModelMatrix.xform( cen );
-        rotdir = m_ModelMatrix.xform( rotdir ) - cen;
-        thrustdir = m_ModelMatrix.xform( thrustdir ) - cen;
+        cen = trans_mat.xform( cen );
+        rotdir = trans_mat.xform( rotdir ) - cen;
+        thrustdir = trans_mat.xform( thrustdir ) - cen;
 
         Matrix4d mat;
         mat.loadIdentity();
-        mat.rotateX( -rev * m_Rotate() );
+        mat.rotateX( -1 * m_Rotate() );
         mat.rotateZ( m_Precone() );
-        mat.postMult( data );
+        mat.postMult( trans_mat );
 
         vec3d pmid = mat.xform( m_FoldAxOrigin );
-        vec3d ptstart = mat.xform( m_FoldAxOrigin + m_FoldAxDirection * axlen / 2.0 );
-        vec3d ptend = mat.xform( m_FoldAxOrigin - m_FoldAxDirection * axlen / 2.0 );
-
+        vec3d ptstart = mat.xform( m_FoldAxOrigin + rev * m_FoldAxDirection * axlen / 2.0 );
+        vec3d ptend = mat.xform( m_FoldAxOrigin - rev * m_FoldAxDirection * axlen / 2.0 );
 
         vec3d dir = ptend - ptstart;
         dir.normalize();
 
+        if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+        {
+            m_ArrowLinesDO.m_PntVec.push_back( ptstart );
+            m_ArrowLinesDO.m_PntVec.push_back( ptend );
+        }
 
-
-        m_ArrowLinesDO.m_PntVec.push_back( ptstart );
-        m_ArrowLinesDO.m_PntVec.push_back( ptend );
         m_ArrowLinesDO.m_PntVec.push_back( cen );
         m_ArrowLinesDO.m_PntVec.push_back( cen + thrustdir * axlen );
 
         MakeArrowhead( cen + thrustdir * axlen, thrustdir, 0.25 * axlen, m_ArrowHeadDO.m_PntVec );
-        MakeCircleArrow( pmid, dir, 0.5 * axlen, m_ArrowLinesDO, m_ArrowHeadDO );
         MakeCircleArrow( cen, rotdir, 0.5 * axlen, m_ArrowLinesDO, m_ArrowHeadDO );
+
+        if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+        {
+            MakeCircleArrow( pmid, dir, 0.5 * axlen, m_ArrowLinesDO, m_ArrowHeadDO );
+        }
     }
 }
 
@@ -575,8 +610,7 @@ void PropGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
         GeomXSec::LoadDrawObjs( draw_obj_vec );
     }
 
-    if ( m_PropMode() <= PROP_MODE::PROP_BOTH  &&
-         ( ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || m_Vehicle->IsGeomActive( m_ID ) ) )
+    if ( ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || m_Vehicle->IsGeomActive( m_ID ) )
     {
         m_ArrowHeadDO.m_GeomID = m_ID + "Arrows";
         m_ArrowHeadDO.m_LineWidth = 1.0;
@@ -999,6 +1033,8 @@ void PropGeom::UpdateSurf()
                 double r = xs->m_RadiusFrac();
                 double w = m_ChordCurve.Comp( r ) * radius;
 
+                xs->m_PropPos.m_CurveSection = m_CylindricalSectionsFlag();
+
                 // Set up prop positioner for highlight curves - not lofting.
                 xs->m_PropPos.m_ParentProp = GetXSecSurf( 0 );
                 xs->m_PropPos.m_Radius = r * radius;
@@ -1083,6 +1119,8 @@ void PropGeom::UpdateSurf()
 
             pp.m_ParentProp = this->GetXSecSurf( 0 );
             pp.m_Radius = r * radius;
+
+            pp.m_CurveSection = m_CylindricalSectionsFlag();
 
             pp.m_Chord = w;
             pp.m_Twist = m_TwistCurve.Comp( r );
@@ -1191,6 +1229,11 @@ void PropGeom::UpdateSurf()
 
         m_CapUMinSuccess[ idisk ] = false;
         m_CapUMaxSuccess[ idisk ] = false;
+
+        if ( m_ReverseFlag() )
+        {
+            m_MainSurfVec[idisk].FlipNormal();
+        }
 
         if ( m_PropMode() == PROP_MODE::PROP_DISK )
         {
@@ -1438,26 +1481,6 @@ xmlNodePtr PropGeom::DecodeXml( xmlNodePtr & node )
     return propeller_node;
 }
 
-//==== Set Active XSec Type ====//
-void PropGeom::SetActiveXSecType( int type )
-{
-    XSec* xs = GetXSec( m_ActiveXSec() );
-
-    if ( !xs )
-    {
-        return;
-    }
-
-    if ( type == xs->GetXSecCurve()->GetType() )
-    {
-        return;
-    }
-
-    m_XSecSurf.ChangeXSecShape( m_ActiveXSec(), type );
-
-    Update();
-}
-
 //==== Override Geom Cut/Copy/Insert/Paste ====//
 void PropGeom::CutXSec( int index )
 {
@@ -1588,11 +1611,6 @@ void PropGeom::AddDefaultSources( double base_len )
     AddDefaultSourcesXSec( base_len, m_Diameter(), m_XSecSurf.NumXSec() - 1 );
 }
 
-//==== Drag Parameters ====//
-void PropGeom::LoadDragFactors( DragFactors& drag_factors )
-{
-}
-
 void PropGeom::EnforceOrder( PropXSec* xs, int indx )
 {
     if ( indx == 0 )
@@ -1608,10 +1626,12 @@ void PropGeom::EnforceOrder( PropXSec* xs, int indx )
     }
     else
     {
+        double tol = 1e-6;
         PropXSec* priorxs = ( PropXSec* ) m_XSecSurf.FindXSec( indx - 1 );
         PropXSec* nextxs = ( PropXSec* ) m_XSecSurf.FindXSec( indx + 1 );
-        double lower = priorxs->m_RadiusFrac();
-        double upper = nextxs->m_RadiusFrac();
+        // Apply tolerance to avoid degenerate surfaces
+        double lower = priorxs->m_RadiusFrac() + tol;
+        double upper = nextxs->m_RadiusFrac() - tol;
         xs->m_RadiusFrac.SetLowerUpperLimits( lower , upper );
     }
 }
@@ -1629,7 +1649,7 @@ void PropGeom::EnforcePCurveOrder( double rfirst, double rlast )
     }
 }
 
-void PropGeom::UpdateTesselate( vector<VspSurf> &surf_vec, int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms, vector< vector< vec3d > > &uw_pnts, bool degen )
+void PropGeom::UpdateTesselate( const vector<VspSurf> &surf_vec, int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms, vector< vector< vec3d > > &uw_pnts, bool degen ) const
 {
     vector < int > tessvec;
     vector < double > rootc;
@@ -1669,7 +1689,7 @@ void PropGeom::UpdateTesselate( vector<VspSurf> &surf_vec, int indx, vector< vec
     surf_vec[indx].Tesselate( tessvec, m_TessW(), pnts, norms, uw_pnts, m_CapUMinTess(), degen, umerge );
 }
 
-void PropGeom::UpdateSplitTesselate( vector<VspSurf> &surf_vec, int indx, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms )
+void PropGeom::UpdateSplitTesselate( const vector<VspSurf> &surf_vec, int indx, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms ) const
 {
     vector < int > tessvec;
     vector < double > rootc;
@@ -1711,8 +1731,14 @@ void PropGeom::UpdateSplitTesselate( vector<VspSurf> &surf_vec, int indx, vector
 
 void PropGeom::UpdatePreTess()
 {
+    // Update clustering before symmetry is applied for m_SurfVec
     m_FoilSurf.SetClustering( m_LECluster(), m_TECluster() );
-    m_MainSurfVec[0].SetClustering( m_LECluster(), m_TECluster() );
+
+    int nsurf = GetNumMainSurfs();
+    for ( int i = 0; i < nsurf; i++ )
+    {
+        m_MainSurfVec[i].SetClustering( m_LECluster(), m_TECluster() );
+    }
 
     CalculateMeshMetrics();
 }
@@ -2185,14 +2211,14 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid )
     }
 }
 
-vector< TMesh* > PropGeom::CreateTMeshVec()
+vector< TMesh* > PropGeom::CreateTMeshVec() const
 {
     vector< TMesh* > TMeshVec;
 
     if ( m_ExportMainSurf )
     {
         vector<VspSurf> surf_vec;
-        GetMainSurfVec( surf_vec );
+        surf_vec = GetMainSurfVecConstRef();
 
         TMeshVec = Geom::CreateTMeshVec( surf_vec );
     }
@@ -2204,14 +2230,75 @@ vector< TMesh* > PropGeom::CreateTMeshVec()
     return TMeshVec;
 }
 
-void PropGeom::GetSurfVec( vector<VspSurf> &surf_vec )
+const vector<VspSurf> & PropGeom::GetSurfVecConstRef() const
 {
     if ( m_ExportMainSurf )
     {
-        GetMainSurfVec( surf_vec );
+        return GetMainSurfVecConstRef();
     }
     else
     {
-        Geom::GetSurfVec( surf_vec );
+        return Geom::GetSurfVecConstRef();
     }
+}
+
+
+void PropGeom::ApproxCubicAllPCurves()
+{
+    for ( int i = 0; i < NUM_PROP_PCURVE; i++ )
+    {
+        if ( m_pcurve_vec[i] )
+        {
+            m_pcurve_vec[i]->Approximate();
+        }
+    }
+}
+
+void PropGeom::ResetThickness()
+{
+    unsigned int nxsec = m_XSecSurf.NumXSec();
+
+    vector < double > rvec( nxsec );
+    vector < double > tcvec( nxsec );
+
+    //==== Update XSec Location/Rotation ====//
+    for ( int i = 0 ; i < nxsec ; i++ )
+    {
+        PropXSec* xs = ( PropXSec* ) m_XSecSurf.FindXSec( i );
+
+        if ( xs )
+        {
+            rvec[i] = xs->m_RadiusFrac();
+
+            XSecCurve *xsc = xs->GetXSecCurve();
+            if ( xsc )
+            {
+                Airfoil* af = dynamic_cast < Airfoil* > ( xsc );
+                if ( af )
+                {
+                    FileAirfoil* faf = dynamic_cast < FileAirfoil* > ( af );
+                    if ( faf )
+                    {
+                        tcvec[i] = faf->m_BaseThickness();
+                    }
+                    else
+                    {
+                        tcvec[i] = af->m_ThickChord();
+                    }
+                }
+                else
+                {
+                    string height_id = xsc->GetHeightParmID();
+                    Parm* height_parm = ParmMgr.FindParm( height_id );
+
+                    string width_id = xsc->GetWidthParmID();
+                    Parm* width_parm = ParmMgr.FindParm( width_id );
+
+                    tcvec[i] = height_parm->Get() / width_parm->Get();
+                }
+            }
+        }
+    }
+
+    m_ThickCurve.SetCurve( rvec, tcvec, PCHIP );
 }

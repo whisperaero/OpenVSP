@@ -232,6 +232,16 @@ public:
         m_ParmButton.SetButtonNameUpdate( flag );
     }
 
+    virtual void SetLabelColor( Fl_Color color )
+    {
+        m_ParmButton.SetLabelColor( color );
+    }
+
+    virtual void ResetLabelColor()
+    {
+        m_ParmButton.ResetLabelColor();
+    }
+
 protected:
 
     virtual void SetValAndLimits( Parm* parm_ptr );
@@ -430,6 +440,10 @@ protected:
 };
 
 //==== Toggle Button ====//
+// WARNING: Updating a ToggleButton with an IntParm when the range of the IntParm 
+// is 0 to 1 will cause the button to initially appear Off when the Parm value is 
+// 1. If this is the case, the IntParm should be changed to a BoolParm if the 
+// ToggleButton is not part of a ToggleRadioGroup.
 class ToggleButton : public GuiDevice
 {
 public:
@@ -1107,6 +1121,8 @@ public:
         return m_DriverGroup;
     }
 
+    void EnforceXSecGeomType( int geom_type ); // Called from CurveEditScreen to disable drivers for Wing and Prop
+
 protected:
 
     virtual void SetValAndLimits( Parm* parm_ptr )      {}
@@ -1136,7 +1152,8 @@ public:
     Fl_Button* maxButtonR,
     Fl_Input* inputL,
     Fl_Input* inputR,
-    VspButton* parm_button,
+    VspButton* parm_button_L,
+    VspButton* parm_button_R,
     double range, const char* format);
 
     virtual void Update( const string& parmL_id, const string& setL_id, const string& eq_id, const string& setR_id, const string& parmR_id );
@@ -1162,14 +1179,15 @@ protected:
     Input  m_InputL;
     Input  m_InputR;
 
-    ParmButton m_ParmButton;
+    ParmButton m_ParmButtonL;
+    ParmButton m_ParmButtonR;
 };
 
 class SkinHeader : public GuiDevice
 {
 public:
     SkinHeader();
-
+    ~SkinHeader();
 
     virtual void DeviceCB( Fl_Widget *w );
 
@@ -1241,6 +1259,7 @@ class PCurveEditor : public GuiDevice
 public:
 
     PCurveEditor();
+    ~PCurveEditor();
 
     // Initialize the member GUI devices and set their callbacks
     virtual void Init( VspScreen* screen, Vsp_Canvas* canvas, Fl_Scroll* ptscroll, Fl_Button* spbutton, Fl_Button* convbutton, Fl_Button* delbutton, Fl_Light_Button* delpickbutton, Fl_Light_Button* splitpickbutton, GroupLayout* ptlayout );
@@ -1253,7 +1272,7 @@ public:
     virtual bool hittest( int mx, int my, double datax, double datay, int r );
 
     // Add the curve points to the canvas and connect them. CEDIT intermediate points are
-    // drawn green. The currently seleted point is highlighted red. 
+    // drawn green. The currently selected point is highlighted red. 
     virtual void PlotData( vector< double > x_data, vector < double > y_data, int curve_type, Fl_Color color = FL_YELLOW );
 
     // Identify the min and max limits for the canvas and update accordingly
@@ -1314,7 +1333,7 @@ protected:
     // Variables to help with CEDIT point selection restrictions
     int m_PrevIndex; // Maintains the previously selected point index
     bool m_CallbackFlag; // Flag that indicates if a Callback was issued prior to Update
-    bool m_UpdateIndexSelector; // Flag used to indiate if the index selector should be updated
+    bool m_UpdateIndexSelector; // Flag used to indicate if the index selector should be updated
 
     PCurve *m_Curve;
     PCurve *m_CurveB;
@@ -1327,7 +1346,6 @@ public:
 
     ColResizeBrowser( int X, int Y, int W, int H, const char* L = 0 );
 
-    ~ColResizeBrowser()         { if ( m_Widths ) delete m_Widths; }
 
     // GET/SET COLUMN SEPARATOR LINE COLOR
     Fl_Color GetColSepColor() const {
@@ -1373,11 +1391,7 @@ private:
 
     // CHANGE CURSOR
     //     Does nothing if cursor already set to value specified.
-    void change_cursor( Fl_Cursor newcursor ) {
-        if ( newcursor == m_LastCursor ) return;
-        window()->cursor( newcursor );
-        m_LastCursor = newcursor;
-    }
+    void change_cursor( Fl_Cursor newcursor );
 
     // RETURN THE COLUMN MOUSE IS 'NEAR'
     //     Returns -1 if none.
@@ -1393,6 +1407,7 @@ private:
     int       m_DragCol;         // col# user is dragging (-1 = not dragging)
     int*      m_Widths;          // pointer to user's width[] array
     size_t    m_NumCol;          // number of columns
+    int       m_HPos;            // Horizontal scroll position
 
 };
 

@@ -901,7 +901,7 @@ void CfdMeshMgrSingleton::ExportFiles()
 
     if ( GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_TKEY_FILE_NAME ) )
     {
-        SubSurfaceMgr.WriteKeyFile( GetCfdSettingsPtr()->GetExportFileName( vsp::CFD_TKEY_FILE_NAME ) );
+        SubSurfaceMgr.WriteTKeyFile(GetCfdSettingsPtr()->GetExportFileName(vsp::CFD_TKEY_FILE_NAME));
     }
 
     if ( GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_CURV_FILE_NAME ) )
@@ -1083,7 +1083,8 @@ void CfdMeshMgrSingleton::WriteTetGen( const string &filename )
 
     //==== Write Tris ====//
     fprintf( fp, "# Part 2 - facet list\n" );
-    fprintf( fp, "%d 0\n", tri_cnt );
+    // <# of facets> <boundary markers (0 or 1)> 
+    fprintf( fp, "%d 1\n", tri_cnt );
 
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
@@ -1097,8 +1098,11 @@ void CfdMeshMgrSingleton::WriteTetGen( const string &filename )
             int ind1 = pntShift[i0] + 1;
             int ind2 = pntShift[i1] + 1;
             int ind3 = pntShift[i2] + 1;
+            int tag = SubSurfaceMgr.GetTag( sTriVec[t].m_Tags );
 
-            fprintf( fp, "1\n" );
+            // <# of polygons> [# of holes] [boundary marker]
+            fprintf( fp, "1 0 %d\n", tag );
+            // <# of corners> <corner 1> <corner 2> <corner 3>
             fprintf( fp, "3 %d %d %d\n", ind1, ind2, ind3 );
         }
     }
@@ -1602,6 +1606,8 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
 
             fclose( fp );
         }
+
+        SubSurfaceMgr.WriteVSPGEOMKeyFile( vspgeom_fn );
     }
 }
 
@@ -2301,7 +2307,7 @@ void CfdMeshMgrSingleton::TessellateChains()
     //  //  printf("Zero Length Chain\n");
     //  //}
 
-    //  ////==== Compute Total Distance Betwee Points ====//
+    //  ////==== Compute Total Distance Between Points ====//
     //  //double total_dist = 0;
     //  //for ( int i = 0 ; i < (*c)->m_TessVec.size() ; i++ )
     //  //{
@@ -3723,6 +3729,7 @@ void CfdMeshMgrSingleton::SubTagTris()
         string geom_id = surf->GetGeomID();
         string id = geom_id + to_string( (long long) surf->GetUnmergedCompID() );
         string name;
+        string exportid;
 
         geom_comp_map[geom_id].insert( surf->GetUnmergedCompID() );
 
@@ -3760,13 +3767,15 @@ void CfdMeshMgrSingleton::SubTagTris()
             }
             else if ( geom_ptr )
             {
-                name = geom_ptr->GetName() + to_string( (long long)geom_comp_map[geom_id].size() );
+                name = geom_ptr->GetName() + "_Surf" + to_string( (long long)geom_comp_map[geom_id].size() - 1 );
+                exportid = geom_id + "_Surf" + to_string( (long long)geom_comp_map[geom_id].size() - 1 );
                 if ( surf->GetWakeFlag() ) name = geom_ptr->GetName()
                                                  + to_string( (long long)comp_num_map[ surf->GetUnmergedCompID() ] )
                                                  + "_Wake";
             }
 
             SubSurfaceMgr.m_CompNames.push_back(name);
+            SubSurfaceMgr.m_CompIDs.push_back(exportid);
         }
 
         surf->SetBaseTag( tag_map[id] );
@@ -3775,6 +3784,7 @@ void CfdMeshMgrSingleton::SubTagTris()
 
     SetSimpSubSurfTags( tag_number );
     SubSurfaceMgr.BuildCompNameMap();
+    SubSurfaceMgr.BuildCompIDMap();
 }
 
 void CfdMeshMgrSingleton::SetSimpSubSurfTags( int tag_offset )
@@ -3786,6 +3796,7 @@ void CfdMeshMgrSingleton::SetSimpSubSurfTags( int tag_offset )
         m_SimpleSubSurfaceVec[i].m_Tag = tag_offset + i + 1;
         // map tag number to surface name
         SubSurfaceMgr.m_TagNames[m_SimpleSubSurfaceVec[i].m_Tag] = m_SimpleSubSurfaceVec[i].GetName();
+        SubSurfaceMgr.m_TagIDs[m_SimpleSubSurfaceVec[i].m_Tag] = m_SimpleSubSurfaceVec[i].GetSSID();
     }
 }
 

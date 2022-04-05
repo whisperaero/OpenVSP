@@ -17,10 +17,10 @@
 #include "Background.h"
 #include "GraphicSingletons.h"
 
-#include "Util.h"
+#include "VspUtil.h"
 
 //==== Constructor ====//
-CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "Edit Curve", 180, 425 )
+CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 615+17, "Edit Curve", 180, 425 )
 {
     m_FLTK_Window->callback( staticCloseCB, this );
     m_MainLayout.SetGroupAndScreen( m_FLTK_Window, this );
@@ -87,9 +87,18 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
     m_XSecLayout.InitWidthHeightVals();
     m_XSecLayout.SetButtonWidth( m_XSecLayout.GetRemainX() / 3 );
 
-    m_XSecLayout.AddButton( m_PreserveXSecARToggle, "Preserve Aspect Ratio" );
-    m_XSecLayout.AddSlider( m_WidthSlider, "Width", 10, "%5.3f" );
-    m_XSecLayout.AddSlider( m_HeightSlider, "Height", 10, "%5.3f" );
+    vector < string > xsec_driver_labels;
+    xsec_driver_labels.resize( vsp::NUM_XSEC_DRIVER );
+    xsec_driver_labels[vsp::WIDTH_XSEC_DRIVER] = string( "Width" );
+    xsec_driver_labels[vsp::HEIGHT_XSEC_DRIVER] = "Height";
+    xsec_driver_labels[vsp::AREA_XSEC_DRIVER] = "Area";
+    xsec_driver_labels[vsp::HWRATIO_XSEC_DRIVER] = "H/W Ratio";
+
+    m_XSecDriverGroupBank.SetDriverGroup( &m_DefaultXSecDriverGroup );
+    m_XSecLayout.AddDriverGroupBank( m_XSecDriverGroupBank, xsec_driver_labels, 10, "%6.5f" );
+
+    m_XSecLayout.AddX( 2 * 17 + 1 );
+    m_XSecLayout.AddSlider( m_DepthSlider, "Depth", 1, "%6.5f" );
 
     m_XSecLayout.AddYGap();
     m_XSecLayout.SetSameLineFlag( false );
@@ -145,8 +154,21 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
 
     m_DrawLayout.AddColorPicker( m_ColorPicker );
 
+    int button_w = m_DrawLayout.GetRemainX() / 4;
+
+    m_DrawLayout.SetSameLineFlag( true );
+    m_DrawLayout.SetFitWidthFlag( false );
+
+    m_DrawLayout.SetButtonWidth( 20 );
+    m_DrawLayout.AddButton( m_PointColorCheck, "" );
+    m_DrawLayout.SetButtonWidth( button_w + 5 );
+    m_DrawLayout.SetFitWidthFlag( true );
+    m_DrawLayout.AddSlider( m_PointColorWheelSlider, "Point Color", 100, "%5.0f" );
+
+    m_DrawLayout.ForceNewLine();
     m_DrawLayout.AddYGap();
-    m_DrawLayout.SetButtonWidth( m_DrawLayout.GetRemainX() / 4 );
+    m_DrawLayout.SetSameLineFlag( false );
+    m_DrawLayout.SetButtonWidth( button_w );
 
     m_DrawLayout.AddSlider( m_PointSizeSlider, "Point Size", 10, "%7.4f" );
     m_DrawLayout.AddSlider( m_LineThicknessSlider, "Line Thick", 10, "%7.4f" );
@@ -192,12 +214,12 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
 
     m_BackgroundImageLayout.SetFitWidthFlag( false );
     m_BackgroundImageLayout.SetSameLineFlag( true );
-    m_BackgroundImageLayout.SetButtonWidth( m_BackgroundImageLayout.GetRemainX() / 2 );
+    m_BackgroundImageLayout.SetButtonWidth( ( m_BackgroundImageLayout.GetW() / 3 ) + 20 );
 
     m_BackgroundImageLayout.AddButton( m_PreserveImageAspect, "Preserve Aspect" );
-    m_PreserveImageAspect.GetFlButton()->value( 1 );
+    m_BackgroundImageLayout.SetButtonWidth( ( m_BackgroundImageLayout.GetW() / 3 ) - 10 );
     m_BackgroundImageLayout.AddButton( m_LockImageToggle, "Lock Image" );
-    m_LockImageToggle.GetFlButton()->value( 0 );
+    m_BackgroundImageLayout.AddButton( m_FlipImageToggle, "Flip Image" );
 
     m_BackgroundImageLayout.SetFitWidthFlag( true );
     m_BackgroundImageLayout.SetSameLineFlag( false );
@@ -233,7 +255,7 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
     int wyaxis = 50;
     int border = 10;
     int window_x = m_MainLayout.GetX() + m_XSecLayout.GetW() + 5 + wyaxis;
-    int window_y = m_MainLayout.GetY() + 5;
+    int window_y = m_MainLayout.GetY() + m_MainLayout.GetStdHeight() + 5;
 
     m_GlWinWidth = m_MainLayout.GetW() - ( m_XSecLayout.GetW() + 2 * border + wyaxis ); // Same width and height
 
@@ -284,6 +306,13 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
     m_YAxis->axis_align( CA_LEFT );
     m_MainLayout.GetGroup()->add( m_YAxis );
 
+    m_ViewChoice.AddItem( "Front", vsp::VIEW_FRONT );
+    m_ViewChoice.AddItem( "Top", vsp::VIEW_TOP );
+    m_ViewChoice.AddItem( "Left", vsp::VIEW_LEFT );
+
+    m_MainLayout.SetX( m_XSecLayout.GetW() + 5 + 10 );
+    m_MainLayout.AddChoice( m_ViewChoice, "View", m_MainLayout.GetX() + 5 );
+
     m_MainLayout.AddY( m_XSecLayout.GetH() + 40 );
 
     //==== Control Point List ====//
@@ -294,6 +323,8 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
     m_PtScroll->type( Fl_Scroll::VERTICAL_ALWAYS );
     m_PtScroll->box( FL_BORDER_BOX );
 
+    m_FLTK_Window->resizable(m_PtScroll);
+
     //==== Initialize Member Variables ====//
     m_FreezeAxis = false;
     m_DeleteActive = false;
@@ -301,7 +332,7 @@ CurveEditScreen::CurveEditScreen( ScreenMgr* mgr ) : TabScreen( mgr, 750, 610, "
 
     m_PrevIndex = 0;
     m_PrevCurveType = 0;
-    m_SliderVecVec.resize( 3 ); // X, Y, & U
+    m_InputVecVec.resize( 5 ); // LINEAR or CEDIT, most common value.
 
     m_ImageZoomOffset = -1;
     m_ImageXOffsetOrig = 0;
@@ -329,6 +360,15 @@ void CurveEditScreen::Show()
 
         m_XSecGlWin->InitZoom();
     }
+
+    Geom* geom_ptr = m_ScreenMgr->GetCurrGeom();
+
+    if ( !geom_ptr )
+    {
+        return;
+    }
+
+    geom_ptr->m_SurfDirty = true; // Ensures width/height parms are deactivated
 }
 
 //==== Get the Active XSec Curve ====//
@@ -352,7 +392,7 @@ XSecCurve* CurveEditScreen::GetXSecCurve()
             return NULL;
         }
 
-        int aid = wing_ptr->m_ActiveAirfoil();
+        int aid = wing_ptr->m_ActiveXSec();
         XSec* xs = wing_ptr->GetXSec( aid );
 
         if ( !xs )
@@ -412,33 +452,43 @@ bool CurveEditScreen::Update()
 
     EditCurveXSec* edit_curve_xs = dynamic_cast<EditCurveXSec*>( xsc );
     assert( edit_curve_xs );
- 
+
+    m_ViewChoice.Update( edit_curve_xs->m_View.GetID() );
+
     m_ShapeChoice.Update( edit_curve_xs->m_ShapeType.GetID() );
     m_SymToggle.Update( edit_curve_xs->m_SymType.GetID() );
     m_ClosedCurveToggle.Update( edit_curve_xs->m_CloseFlag.GetID() );
 
-    m_WidthSlider.Update( edit_curve_xs->m_Width.GetID() );
-    m_HeightSlider.Update( edit_curve_xs->m_Height.GetID() );
+    m_XSecDriverGroupBank.SetDriverGroup( edit_curve_xs->m_DriverGroup );
+    vector< string > parm_ids = edit_curve_xs->GetDriverParms();
+    m_XSecDriverGroupBank.Update( parm_ids );
+
+    m_DepthSlider.Update( edit_curve_xs->m_Depth.GetID() );
+
+    Geom* geom = m_ScreenMgr->GetCurrGeom();
+    m_XSecDriverGroupBank.EnforceXSecGeomType( geom->GetType().m_Type );
 
     m_AbsDimToggle.Update( edit_curve_xs->m_AbsoluteFlag.GetID() );
-    m_PreserveXSecARToggle.Update( edit_curve_xs->m_PreserveARFlag.GetID() );
 
     Geom* geom_ptr = m_ScreenMgr->GetCurrGeom();
-
-    if ( geom_ptr && ( geom_ptr->GetType().m_Type == MS_WING_GEOM_TYPE || geom_ptr->GetType().m_Type == PROP_GEOM_TYPE ) )
-    {
-        m_PreserveXSecARToggle.Deactivate();
-        edit_curve_xs->m_PreserveARFlag.Set( false );
-    }
-    else
-    {
-        m_PreserveXSecARToggle.Activate();
-    }
 
     if( m_XSecGlWin )
     {
         VSPGraphic::Viewport* viewport = m_XSecGlWin->getGraphicEngine()->getDisplay()->getViewport();
         assert( viewport );
+
+        if ( edit_curve_xs->m_View() == vsp::VIEW_FRONT ) // X,Y
+        {
+            m_XSecGlWin->getGraphicEngine()->getDisplay()->changeView( VSPGraphic::Common::VSP_CAM_TOP );
+        }
+        else if ( edit_curve_xs->m_View() == vsp::VIEW_TOP ) // X,Z
+        {
+            m_XSecGlWin->getGraphicEngine()->getDisplay()->changeView( VSPGraphic::Common::VSP_CAM_LEFT );
+        }
+        else if ( edit_curve_xs->m_View() == vsp::VIEW_LEFT ) // Z,Y
+        {
+            m_XSecGlWin->getGraphicEngine()->getDisplay()->changeView( VSPGraphic::Common::VSP_CAM_FRONT_YUP );
+        }
 
         m_XSecGlWin->clear();
 
@@ -483,7 +533,7 @@ bool CurveEditScreen::Update()
             break;
         }
 
-        if( n != m_SliderVecVec[0].size() || m_PrevCurveType != edit_curve_xs->m_CurveType() )
+        if( n != m_InputVecVec[0].size() || m_PrevCurveType != edit_curve_xs->m_CurveType() )
         {
             RedrawXYSliders( n, edit_curve_xs->m_CurveType() );
         }
@@ -510,7 +560,7 @@ bool CurveEditScreen::Update()
                     fp->SetDisplayResultFlag( false );
                 }
 
-                m_SliderVecVec[0][i].Update( fp->GetID() );
+                m_InputVecVec[0][i].Update( fp->GetID() );
             }
 
             fp = edit_curve_xs->m_YParmVec[i];
@@ -527,13 +577,39 @@ bool CurveEditScreen::Update()
                     fp->SetDisplayResultFlag( false );
                 }
 
-                m_SliderVecVec[1][i].Update( fp->GetID() );
+                m_InputVecVec[1][i].Update( fp->GetID() );
+            }
+
+            fp = edit_curve_xs->m_ZParmVec[i];
+            if( fp )
+            {
+                fp->SetRefVal( edit_curve_xs->GetHeight() );
+
+                if( edit_curve_xs->m_AbsoluteFlag.Get() )
+                {
+                    fp->SetDisplayResultFlag( true );
+                }
+                else
+                {
+                    fp->SetDisplayResultFlag( false );
+                }
+
+                m_InputVecVec[2][i].Update( fp->GetID() );
             }
 
             Parm* p = edit_curve_xs->m_UParmVec[i];
             if( p )
             {
-                m_SliderVecVec[2][i].Update( p->GetID() );
+                m_InputVecVec[3][i].Update( p->GetID() );
+            }
+
+            if( edit_curve_xs->m_CurveType() != vsp::PCHIP )
+            {
+                p = edit_curve_xs->m_RParmVec[i];
+                if( p )
+                {
+                    m_InputVecVec[4][i].Update( p->GetID() );
+                }
             }
 
             if( edit_curve_xs->m_CurveType() == vsp::CEDIT )
@@ -553,15 +629,17 @@ bool CurveEditScreen::Update()
 
             if( i == m_PntSelector.GetIndex() )
             {
-                m_SliderVecVec[0][i].SetLabelColor( FL_YELLOW );
-                m_SliderVecVec[1][i].SetLabelColor( FL_YELLOW );
-                m_SliderVecVec[2][i].SetLabelColor( FL_YELLOW );
+                for ( int j = 0; j < m_InputVecVec.size(); j++ )
+                {
+                    m_InputVecVec[j][i].SetLabelColor( FL_YELLOW );
+                }
             }
             else
             {
-                m_SliderVecVec[0][i].ResetLabelColor();
-                m_SliderVecVec[1][i].ResetLabelColor();
-                m_SliderVecVec[2][i].ResetLabelColor();
+                for ( int j = 0; j < m_InputVecVec.size(); j++ )
+                {
+                    m_InputVecVec[j][i].ResetLabelColor();
+                }
             }
         }
 
@@ -573,6 +651,18 @@ bool CurveEditScreen::Update()
 
         m_PointSizeSlider.Update( edit_curve_xs->m_XSecPointSize.GetID() );
         m_LineThicknessSlider.Update( edit_curve_xs->m_XSecLineThickness.GetID() );
+
+        m_PointColorCheck.Update( edit_curve_xs->m_XSecPointColorFlag.GetID() );
+        m_PointColorWheelSlider.Update( edit_curve_xs->m_XSecPointColorWheel.GetID() );
+
+        if ( !edit_curve_xs->m_XSecPointColorFlag() )
+        {
+            m_PointColorWheelSlider.Deactivate();
+        }
+        else
+        {
+            m_PointColorWheelSlider.Activate();
+        }
 
         m_ImageToggle.Update( edit_curve_xs->m_XSecImageFlag.GetID() );
         m_ImageFileOutput.Update( StringUtil::truncateFileName( edit_curve_xs->GetImageFile(), 40 ).c_str() );
@@ -603,6 +693,9 @@ bool CurveEditScreen::Update()
 
         m_PreserveImageAspect.Update( edit_curve_xs->m_XSecImagePreserveAR.GetID() );
         m_LockImageToggle.Update( edit_curve_xs->m_XSecLockImageFlag.GetID() );
+
+        m_FlipImageToggle.Update( edit_curve_xs->m_XSecFlipImageFlag.GetID() );
+        viewport->getBackground()->flipX( edit_curve_xs->m_XSecFlipImageFlag.Get() );
 
         if ( edit_curve_xs->m_XSecLockImageFlag() )
         {
@@ -710,13 +803,14 @@ void CurveEditScreen::UpdateDrawObj()
 
     int ndata = control_pts.size();
 
-    double point_size = edit_curve_xs->m_XSecPointSize.Get();
-    double line_thick = edit_curve_xs->m_XSecLineThickness.Get();
+    double point_size = m_XSecGlWin->pixels_per_unit() * edit_curve_xs->m_XSecPointSize.Get();
+    double line_thick = m_XSecGlWin->pixels_per_unit() *edit_curve_xs->m_XSecLineThickness.Get();
+    int point_color = 361; // DrawObj::ColorWheel( 361 ) will return black (0, 0, 0)
 
-#ifdef __APPLE__
-    point_size *= 2;
-    line_thick *= 2;
-#endif
+    if ( edit_curve_xs->m_XSecPointColorFlag.Get() )
+    {
+        point_color = edit_curve_xs->m_XSecPointColorWheel.Get();
+    }
 
     if ( w == 0 && h == 0 )
     {
@@ -793,7 +887,7 @@ void CurveEditScreen::UpdateDrawObj()
         m_XSecCtrlPntsDrawObj.m_PntVec = control_pts;
         m_XSecCtrlPntsDrawObj.m_Type = DrawObj::VSP_POINTS;
         m_XSecCtrlPntsDrawObj.m_PointSize = point_size;
-        m_XSecCtrlPntsDrawObj.m_PointColor = vec3d( 0, 0, 0 );
+        m_XSecCtrlPntsDrawObj.m_PointColor = DrawObj::ColorWheel( point_color );
 
         if( !m_FreezeAxis && m_XSecGlWin )
         {
@@ -882,7 +976,19 @@ void CurveEditScreen::GuiDeviceCallBack( GuiDevice* gui_device )
 
     if ( gui_device == &m_InitShapeButton )
     {
-        edit_curve_xs->InitShape(); // TODO: Force update
+        edit_curve_xs->InitShape();
+
+        Geom* geom_ptr = m_ScreenMgr->GetCurrGeom();
+
+        if ( !geom_ptr )
+        {
+            return;
+        }
+
+        // Set tess dirty flag and update. This fixes an issue where the XSec is drawn detached 
+        // from the parent Geom surface since the surface was not updated
+        geom_ptr->m_SurfDirty = true;
+        geom_ptr->Update();
     }
     else if ( gui_device == &m_ReparameterizeButton )
     {
@@ -967,8 +1073,10 @@ void CurveEditScreen::GuiDeviceCallBack( GuiDevice* gui_device )
         for( size_t j = 0; j < edit_curve_xs->m_XParmVec.size(); j++ )
         {
             if( !strcmp( parm_id.c_str(), edit_curve_xs->m_XParmVec[j]->GetID().c_str() ) || 
-                !strcmp( parm_id.c_str(), edit_curve_xs->m_YParmVec[j]->GetID().c_str() )  || 
-                !strcmp( parm_id.c_str(), edit_curve_xs->m_UParmVec[j]->GetID().c_str() ) || 
+                !strcmp( parm_id.c_str(), edit_curve_xs->m_YParmVec[j]->GetID().c_str() ) ||
+                !strcmp( parm_id.c_str(), edit_curve_xs->m_ZParmVec[j]->GetID().c_str() ) ||
+                !strcmp( parm_id.c_str(), edit_curve_xs->m_RParmVec[j]->GetID().c_str() ) ||
+                !strcmp( parm_id.c_str(), edit_curve_xs->m_UParmVec[j]->GetID().c_str() ) ||
                 !strcmp( parm_id.c_str(), edit_curve_xs->m_EnforceG1Vec[j]->GetID().c_str() ) || 
                 !strcmp( parm_id.c_str(), edit_curve_xs->m_FixedUVec[j]->GetID().c_str() ) )
             {
@@ -1121,17 +1229,31 @@ void CurveEditScreen::UpdateAxisLimits()
 
 void CurveEditScreen::RedrawXYSliders( int num_pts, int curve_type )
 {
-    int num_sliders = (int)m_SliderVecVec.size();
+    int num_inputs;
+    if( curve_type == vsp::PCHIP )
+    {
+        num_inputs = 4; // X, Y, Z, U
+    }
+    else
+    {
+        num_inputs = 5; // X, Y, Z, U, & R
+    }
+
+    if ( num_inputs != m_InputVecVec.size() )
+    {
+        m_InputVecVec.clear();
+        m_InputVecVec.resize( num_inputs );
+    }
+
+    for( int i = 0; i < num_inputs; i++ )
+    {
+        m_InputVecVec[i].clear();
+        m_InputVecVec[i].resize( num_pts );
+    }
 
     m_PtScroll->clear();
     m_PtLayout.SetGroup( m_PtScroll );
     m_PtLayout.InitWidthHeightVals();
-
-    for( int i = 0; i < m_SliderVecVec.size(); i++ )
-    {
-        m_SliderVecVec[i].clear();
-        m_SliderVecVec[i].resize( num_pts );
-    }
 
     m_EnforceG1Vec.clear();
     m_EnforceG1Vec.resize( num_pts );
@@ -1139,40 +1261,33 @@ void CurveEditScreen::RedrawXYSliders( int num_pts, int curve_type )
     m_FixedUCheckVec.clear();
     m_FixedUCheckVec.resize( num_pts );
 
-    int gap_w = 4;
-    int input_w = 50;
-    int range_button_w = 10;
-    int button_w = 35;
+    int gap_w = 5;
+    int button_w = 45;
     int scroll_w = 15;
     int fix_u_w = 55;
-
-    m_PtLayout.SetButtonWidth( button_w );
-    m_PtLayout.SetInputWidth( input_w );
 
     m_PtLayout.SetSameLineFlag( true );
     m_PtLayout.SetFitWidthFlag( false );
 
     if( curve_type == vsp::CEDIT )
     {
-        int check_button_w = 45;
-        int slider_w = ( m_PtLayout.GetRemainX() - ( fix_u_w + scroll_w + check_button_w + num_sliders * button_w + 2 * num_sliders * range_button_w + num_sliders * gap_w + num_sliders * input_w ) ) / num_sliders;
-        m_PtLayout.SetSliderWidth( slider_w );
+        int g1_w = 45;
+        int input_w = ( m_PtLayout.GetRemainX() - (fix_u_w + scroll_w + g1_w + (num_inputs + 2 ) * gap_w + num_inputs * button_w ) ) / num_inputs;
+        m_PtLayout.SetInputWidth( input_w );
 
         for( int n = 0; n < num_pts; n++ )
         {
             m_PtLayout.SetButtonWidth( button_w );
+            m_PtLayout.AddX( gap_w );
 
-            for( int i = 0; i < num_sliders; i++ )
+            for(int i = 0; i < num_inputs; i++ )
             {
-                m_PtLayout.AddSlider( m_SliderVecVec[i][n], "AUTO_UPDATE", 2, "%9.4f" );
+                m_PtLayout.AddInput( m_InputVecVec[i][n], "AUTO_UPDATE", "%9.4f" );
 
-                if( i != num_sliders - 1 )
-                {
-                    m_PtLayout.AddX( gap_w );
-                }
+                m_PtLayout.AddX( gap_w );
             }
 
-            m_PtLayout.SetButtonWidth( check_button_w );
+            m_PtLayout.SetButtonWidth(g1_w );
             m_PtLayout.AddButton( m_EnforceG1Vec[n], "G1" );
             m_PtLayout.SetButtonWidth( fix_u_w );
             m_PtLayout.AddButton( m_FixedUCheckVec[n], "Fix U" );
@@ -1181,22 +1296,19 @@ void CurveEditScreen::RedrawXYSliders( int num_pts, int curve_type )
     }
     else
     {
-        int fix_u_w = 55;
-        int slider_w = ( m_PtLayout.GetRemainX() - ( fix_u_w + scroll_w + num_sliders * button_w + 2 * num_sliders * range_button_w + num_sliders * gap_w + num_sliders * input_w ) ) / num_sliders;
-        m_PtLayout.SetSliderWidth( slider_w );
+        int input_w = ( m_PtLayout.GetRemainX() - (fix_u_w + scroll_w + (num_inputs + 2 ) * gap_w + num_inputs * button_w ) ) / num_inputs;
+        m_PtLayout.SetInputWidth( input_w );
 
         for( int n = 0; n < num_pts; n++ )
         {
             m_PtLayout.SetButtonWidth( button_w );
+            m_PtLayout.AddX( gap_w );
 
-            for( int i = 0; i < num_sliders; i++ )
+            for(int i = 0; i < num_inputs; i++ )
             {
-                m_PtLayout.AddSlider( m_SliderVecVec[i][n], "AUTO_UPDATE", 2, "%9.4f" );
+                m_PtLayout.AddInput( m_InputVecVec[i][n], "AUTO_UPDATE", "%9.4f" );
 
-                if( i != m_SliderVecVec.size() - 1 )
-                {
-                    m_PtLayout.AddX( gap_w );
-                }
+                m_PtLayout.AddX( gap_w );
             }
 
             m_PtLayout.SetButtonWidth( fix_u_w );

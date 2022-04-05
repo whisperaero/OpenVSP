@@ -503,8 +503,6 @@ void TMesh::CopyAttributes( TMesh* m )
     m_ShellFlag = m->m_ShellFlag;
     m_ShellMassArea = m->m_ShellMassArea;
 
-    m_DragFactors = m->m_DragFactors;
-
     m_SurfType = m->m_SurfType;
 
     m_UWPnts = m->m_UWPnts;
@@ -597,7 +595,7 @@ void TMesh::DecodeTriList( xmlNodePtr & node, int num_tris )
     }
 }
 
-void TMesh::LoadGeomAttributes( Geom* geomPtr )
+void TMesh::LoadGeomAttributes( const Geom* geomPtr )
 {
     /*color       = geomPtr->getColor();
     materialID    = geomPtr->getMaterialID();*/
@@ -615,9 +613,6 @@ void TMesh::LoadGeomAttributes( Geom* geomPtr )
 
     //==== Check for Alternate Output Name ====//
     m_NameStr   = geomPtr->GetName();
-
-    geomPtr->LoadDragFactors( m_DragFactors );
-
 }
 
 void TMesh::RemoveIsectEdges()
@@ -1231,7 +1226,7 @@ void TMesh::AddTri( const vec3d & v0, const vec3d & v1, const vec3d & v2, const 
 // Base
 void TMesh::AddTri( const TTri* tri)
 {
-    // Copys and existing triangle and pushes back into the existing
+    // Copies an existing triangle and pushes back into the existing
     TTri* new_tri = new TTri();
 
     new_tri->CopyFrom( tri );
@@ -1614,7 +1609,7 @@ void TTri::SplitTri()
     m_NVec.push_back( m_N1 );
     m_NVec.push_back( m_N2 );
 
-    // Detect if currenlty in uw space
+    // Detect if currently in uw space
     bool uwflag = false;
     if ( !m_N0->GetXYZFlag() )
     {
@@ -1714,7 +1709,7 @@ void TTri::SplitTri()
                 }
             }
         }
-        //==== Didnt Find One - Add New ====//
+        //==== Didn't Find One - Add New ====//
         if ( matchNodeIndex[i] == -1 )
         {
             TNode* sn = new TNode();        // New node
@@ -1989,7 +1984,7 @@ void TTri::TriangulateSplit( int flattenAxis )
     in.edgemarkerlist = NULL;
     in.segmentmarkerlist = NULL;
 
-    //==== Load Points into Traingle Struct ====//
+    //==== Load Points into Triangle Struct ====//
     in.numberofpoints = m_NVec.size();
 
 
@@ -2319,12 +2314,13 @@ void TTri::SplitEdges( TNode* n01, TNode* n12, TNode* n20 )
 
 int TTri::WakeEdge()
 {
+    double tol = 1e-12;
     int type = GetTMeshPtr()->m_SurfType;
     if ( type == vsp::WING_SURF || type == vsp::PROP_SURF )
     {
-        bool n0 = m_N0->m_UWPnt.y() <= TMAGIC;
-        bool n1 = m_N1->m_UWPnt.y() <= TMAGIC;
-        bool n2 = m_N2->m_UWPnt.y() <= TMAGIC;
+        bool n0 = m_N0->m_UWPnt.y() <= ( TMAGIC + tol );
+        bool n1 = m_N1->m_UWPnt.y() <= ( TMAGIC + tol );
+        bool n2 = m_N2->m_UWPnt.y() <= ( TMAGIC + tol );
 
         if ( n0 && n1 )
         {
@@ -2383,7 +2379,7 @@ void TBndBox::Reset()
     m_TriVec.clear();
 }
 
-//==== Create Oct Tree of Overlaping BndBoxes ====//
+//==== Create Oct Tree of Overlapping BndBoxes ====//
 void TBndBox::SplitBox()
 {
     int i;
@@ -3935,7 +3931,7 @@ void TMesh::FindIJ( const vec3d & uw_pnt, int &start_u, int &start_v )
     }
 }
 
-void CreateTMeshVecFromPts( Geom * geom,
+void CreateTMeshVecFromPts( const Geom * geom,
                             vector < TMesh* > & TMeshVec,
                             const vector< vector<vec3d> > & pnts,
                             const vector< vector<vec3d> > & norms,

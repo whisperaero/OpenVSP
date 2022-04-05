@@ -13,7 +13,8 @@
 #include "ParmMgr.h"
 #include "FuselageGeom.h"
 #include "BORGeom.h"
-#include "Util.h"
+#include "VspUtil.h"
+#include "StlHelper.h"
 #include "eli/geom/curve/length.hpp"
 
 typedef piecewise_curve_type::index_type curve_index_type;
@@ -32,6 +33,14 @@ using namespace vsp;
 //==== Default Constructor ====//
 XSecCurve::XSecCurve()
 {
+    m_DriverGroup = new HWXSecCurveDriverGroup();
+
+    XSecCurveDriverGroup *xscdg = dynamic_cast< XSecCurveDriverGroup* > ( m_DriverGroup );
+    if ( xscdg )
+    {
+        xscdg->m_Parent = this;
+    }
+
     m_GroupName = "XSecCurve";
     m_GroupSuffix = -1;
 
@@ -89,7 +98,7 @@ XSecCurve::XSecCurve()
     m_LETrimThickChord.SetDescript( "T/C to trim leading edge" );
 
     m_TECapType.Init( "TE_Cap_Type", "Cap", this, FLAT_END_CAP, FLAT_END_CAP, NUM_END_CAP_OPTIONS - 1 );
-    m_TECapLength.Init( "TE_Cap_Length", "Cap", this, 1, 0, 20 );
+    m_TECapLength.Init( "TE_Cap_Length", "Cap", this, 1, -20, 20 );
     m_TECapOffset.Init( "TE_Cap_Offset", "Cap", this, 0, -20, 20 );
     m_TECapStrength.Init( "TE_Cap_Strength", "Cap", this, 0.5, 0, 1);
 
@@ -104,6 +113,47 @@ XSecCurve::XSecCurve()
     m_DeltaY.Init( "DeltaY", m_GroupName, this, 0, -1e3, 1e3 );
     m_ShiftLE.Init( "ShiftLE", m_GroupName, this, 0, -1.9, 1.9 );
 
+    m_ChevronType.Init( "Chevron_Type", "Chevron", this, vsp::CHEVRON_NONE, vsp::CHEVRON_NONE, vsp::CHEVRON_NUM_TYPES - 1 );
+
+    m_ChevNumber.Init( "Number", "Chevron", this, 8, 1, 1e3 );
+
+    m_ChevOnDuty.Init( "On_Duty", "Chevron", this, 0, 0, 1 );
+    m_ChevOffDuty.Init( "Off_Duty", "Chevron", this, 0, 0, 1 );
+
+    m_ChevDirAngleAllSymFlag.Init( "AllSym", "Chevron", this, 1, 0, 1 );
+    m_ChevDirAngleAllSymFlag.SetDescript( "Set all chevron angles equal." );
+    m_ChevDirAngleTBSymFlag.Init( "TBSym", "Chevron", this, 1, 0, 1 );
+    m_ChevDirAngleTBSymFlag.SetDescript( "Set top/bottom chevron angles equal." );
+    m_ChevDirAngleRLSymFlag.Init( "RLSym", "Chevron", this, 1, 0, 1 );
+    m_ChevDirAngleRLSymFlag.SetDescript( "Set left/right chevron angles equal." );
+
+    m_ChevronExtentMode.Init( "W01_Mode", "Chevron", this, vsp::CHEVRON_W01_SE, vsp::CHEVRON_W01_SE, vsp::CHEVRON_W01_NUM_MODES - 1 );
+    m_ChevW01StartGuide.Init( "W01_Start_Guide", "Chevron", this, vsp::W_FREE, vsp::W_RIGHT_0, vsp::W_FREE );
+    m_ChevW01Start.Init( "W01_Start", "Chevron", this, 0, 0, 1 );
+    m_ChevW01EndGuide.Init( "W01_End_Guide", "Chevron", this, vsp::W_FREE, vsp::W_RIGHT_0, vsp::W_FREE );
+    m_ChevW01End.Init( "W01_End", "Chevron", this, 0.5, 0, 1 );
+    m_ChevW01CenterGuide.Init( "W01_Center_Guide", "Chevron", this, vsp::W_FREE, vsp::W_RIGHT_0, vsp::W_FREE );
+    m_ChevW01Center.Init( "W01_Center", "Chevron", this, 0.25, 0, 1 );
+    m_ChevW01Width.Init( "W01_Width", "Chevron", this, 0.5, 0, 1 );
+
+    m_ChevTopAmplitude.Init( "TopAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
+    m_ChevBottomAmplitude.Init( "BottomAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
+    m_ChevRightAmplitude.Init( "LeftAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
+    m_ChevLeftAmplitude.Init( "RightAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
+
+    m_ChevTopAngle.Init( "Top_Angle", "Chevron", this, 0.0, -360.0, 360.0 );
+    m_ChevBottomAngle.Init( "Bottom_Angle", "Chevron", this, 0.0, -360.0, 360.0 );
+    m_ChevRightAngle.Init( "Right_Angle", "Chevron", this, 0.0, -360.0, 360.0 );
+    m_ChevLeftAngle.Init( "Left_Angle", "Chevron", this, 0.0, -360.0, 360.0 );
+
+    m_ChevTopSlew.Init( "Top_Slew", "Chevron", this, 0.0, -360.0, 360.0 );
+    m_ChevBottomSlew.Init( "Bottom_Slew", "Chevron", this, 0.0, -360.0, 360.0 );
+    m_ChevRightSlew.Init( "Right_Slew", "Chevron", this, 0.0, -360.0, 360.0 );
+    m_ChevLeftSlew.Init( "Left_Slew", "Chevron", this, 0.0, -360.0, 360.0 );
+
+    m_ValleyRad.Init( "Valley_Radius", "Chevron", this, 0.0, 0.0, 1e12 );
+    m_PeakRad.Init( "Peak_Radius", "Chevron", this, 0.0, 0.0, 1e12 );
+
     // Background Image Parms
     m_XSecImagePreserveAR.Init( "XSecImagePreserveAR", ( m_GroupName + "_Background" ), this, true, false, true );
     m_XSecImageFlag.Init( "XSecImageFlag", ( m_GroupName + "_Background" ), this, false, false, true );
@@ -112,6 +162,13 @@ XSecCurve::XSecCurve()
     m_XSecImageH.Init( "XSecImageH", ( m_GroupName + "_Background" ), this, 1.0, -1.0e12, 1.0e12 );
     m_XSecImageXOffset.Init( "XSecImageXOffset", ( m_GroupName + "_Background" ), this, 0.0, -1.0e12, 1.0e12 );
     m_XSecImageYOffset.Init( "XSecImageYOffset", ( m_GroupName + "_Background" ), this, 0.0, -1.0e12, 1.0e12 );
+    m_XSecFlipImageFlag.Init( "XSecFlipImageFlag", ( m_GroupName + "_Background" ), this, false, false, true );
+
+    m_Area.Init( "Area", m_GroupName, this, 0, 0, 1e12 );
+    m_Area.SetDescript( "XSec Area" );
+
+    m_HWRatio.Init( "HWRatio", m_GroupName, this, 0, 0, 1e12 );
+    m_HWRatio.SetDescript( "XSec H/W Ratio" );
 
     m_FakeWidth = 1.0;
     m_UseFakeWidth = false;
@@ -120,15 +177,20 @@ XSecCurve::XSecCurve()
     m_yscale = 1.0;
 }
 
-//==== Convert Any XSec to Cubic Bezier Edit Curve ====//
-EditCurveXSec* XSecCurve::ConvertToEdit( XSecCurve* orig_curve )
+XSecCurve::~XSecCurve()
 {
-    if ( orig_curve->GetType() == vsp::XS_EDIT_CURVE )
+    delete m_DriverGroup;
+}
+
+//==== Convert Any XSec to Cubic Bezier Edit Curve ====//
+EditCurveXSec* XSecCurve::ConvertToEdit()
+{
+    if ( GetType() == vsp::XS_EDIT_CURVE )
     {
-        return dynamic_cast<EditCurveXSec*>( orig_curve );
+        return dynamic_cast<EditCurveXSec*>( this );
     }
 
-    VspCurve vsp_curve = orig_curve->GetBaseEditCurve();
+    VspCurve vsp_curve = GetBaseEditCurve();
 
     // Make the curve more coarse. Force wingtype to false to avoid TMAGIC curve spitting, since 
     // XSecCurve::Update() already does it.
@@ -139,27 +201,30 @@ EditCurveXSec* XSecCurve::ConvertToEdit( XSecCurve* orig_curve )
 
     vsp_curve.GetCubicControlPoints( point_vec, param_vec );
 
-    double offset = orig_curve->GetWidth() / 2;
+    double offset = GetWidth() / 2;
+
+    vector < double > r_vec( param_vec.size() );
 
     for ( size_t i = 0; i < param_vec.size(); i++ )
     {
         param_vec[i] = param_vec[i] / 4.0; // Store point parameter (0-1) internally
         // Shift by 1/2 width and nondimensionalize
-        point_vec[i].set_x( ( point_vec[i].x() - offset ) / max( orig_curve->GetWidth(), 1E-9 ) );
-        point_vec[i].set_y( point_vec[i].y() / max( orig_curve->GetHeight(), 1E-9 ) );
+        point_vec[i].set_x( ( point_vec[i].x() - offset ) / max( GetWidth(), 1E-9 ) );
+        point_vec[i].set_y( point_vec[i].y() / max( GetHeight(), 1E-9 ) );
+        r_vec[i] = 0.0;
     }
 
     EditCurveXSec* xscrv_ptr = new EditCurveXSec();
 
-    xscrv_ptr->CopyFrom( orig_curve );
+    xscrv_ptr->CopyFrom( this );
     xscrv_ptr->m_SymType.Set( vsp::SYM_NONE );
     // TODO: Transfer symmetry and G1 continuity qualities
 
     // Transfer width and height parm values
-    xscrv_ptr->SetWidthHeight( orig_curve->GetWidth(), orig_curve->GetHeight() );
+    xscrv_ptr->SetWidthHeight( GetWidth(), GetHeight() );
 
     // Set Bezier control points
-    xscrv_ptr->SetPntVecs( param_vec, point_vec );
+    xscrv_ptr->SetPntVecs( param_vec, point_vec, r_vec );
 
     return xscrv_ptr;
 }
@@ -270,6 +335,7 @@ void XSecCurve::CopyBackgroundSettings( XSecCurve* xsc )
     m_XSecImagePreserveAR.Set( xsc->m_XSecImagePreserveAR.Get() );
     m_XSecImageFlag.Set( xsc->m_XSecImageFlag.Get() );
     m_ImageFile = xsc->GetImageFile();
+    m_XSecFlipImageFlag = xsc->m_XSecFlipImageFlag();
 }
 
 //==== Parm Changed ====//
@@ -302,10 +368,156 @@ void XSecCurve::ParmChanged( Parm* parm_ptr, int type )
 //==== Update ====//
 void XSecCurve::Update()
 {
-    m_BaseEditCurve = m_Curve; // Baseline VspCurve to initialize an EditCurveXSec with 
-
     m_TETrimX.SetUpperLimit( 0.999 * GetWidth() );
 
+    // Reconcile height, width, area, and hwratio.
+    // Potentially involves an iterative solution when area is a driver.
+    // May include lofting the curve.
+    m_DriverGroup->UpdateGroup( GetDriverParms() );
+
+    UpdateCurve();
+
+    if ( m_Type != XS_POINT )
+    {
+        if ( !m_DriverGroup->IsDriver( vsp::AREA_XSEC_DRIVER ) )
+        {
+            m_Area = m_Curve.CompArea( vsp::Y_DIR, vsp::X_DIR );
+        }
+
+        if ( !m_DriverGroup->IsDriver( vsp::HWRATIO_XSEC_DRIVER ) )
+        {
+            if ( GetWidth() > 1e-6 * m_Area() )
+            {
+                m_HWRatio = GetHeight() / GetWidth();
+            }
+            else
+            {
+                m_HWRatio = 1.0;
+            }
+        }
+
+        XSecCurveDriverGroup *xscdg = dynamic_cast< XSecCurveDriverGroup* > ( m_DriverGroup );
+        if ( xscdg )
+        {
+            xscdg->m_prevArea = m_Area();
+        }
+    }
+    else
+    {
+        m_Area = 0.0;
+        m_HWRatio = 1.0;
+    }
+
+    m_BaseEditCurve = m_Curve; // Baseline VspCurve to initialize an EditCurveXSec with
+
+    bool wingtype = DetermineWingType();
+
+    // Order of these curve modifiers matters.
+    CloseTE( wingtype );
+    TrimTE( wingtype );
+
+    CloseLE( wingtype );
+    TrimLE( wingtype );
+
+    CapTE( wingtype );
+    CapLE( wingtype );
+
+    // Apply 3D Chevron modification.
+    Chevron();
+
+    if ( m_Type != XS_POINT )
+    {
+        double w = GetWidth();
+        double h = GetHeight();
+        if ( w == 0 ) w = 1;
+        if ( h == 0 ) h = 1;
+        double lref = sqrt( w * w + h * h );
+        m_Curve.ToBinaryCubic( wingtype, 1e-6 * lref );
+    }
+
+    RotTransScale();
+
+    if ( m_yscale != 1.0 )
+    {
+        m_Curve.ScaleY( m_yscale );
+    }
+
+    m_LateUpdateFlag = false;
+}
+
+//==== Get Driver Parms ====//
+vector< string > XSecCurve::GetDriverParms()
+{
+    vector< string > parm_ids;
+    parm_ids.resize( vsp::NUM_XSEC_DRIVER );
+    parm_ids[ vsp::WIDTH_XSEC_DRIVER ] = GetWidthParmID();
+    parm_ids[ vsp::HEIGHT_XSEC_DRIVER ] = GetHeightParmID();
+    parm_ids[ vsp::AREA_XSEC_DRIVER ] = m_Area.GetID();
+    parm_ids[ vsp::HWRATIO_XSEC_DRIVER ] = m_HWRatio.GetID();
+
+    return parm_ids;
+}
+
+//==== Get Curve ====//
+VspCurve& XSecCurve::GetCurve()
+{
+    if ( m_LateUpdateFlag )
+    {
+        Update();
+    }
+
+    return m_Curve;
+}
+
+//==== Encode XML ====//
+xmlNodePtr XSecCurve::EncodeXml(  xmlNodePtr & node  )
+{
+    ParmContainer::EncodeXml( node );
+    xmlNodePtr xsec_node = xmlNewChild( node, NULL, BAD_CAST "XSecCurve", NULL );
+    if ( xsec_node )
+    {
+        XmlUtil::AddIntNode( xsec_node, "Type", m_Type );
+
+        m_DriverGroup->EncodeXml( xsec_node );
+
+        if( m_ImageFile.size() > 0 )
+        {
+            XmlUtil::AddStringNode( xsec_node, "ImageFile", m_ImageFile );
+        }
+    }
+    return xsec_node;
+}
+
+xmlNodePtr XSecCurve::DecodeXml( xmlNodePtr & node )
+{
+    ParmContainer::DecodeXml( node );
+
+    xmlNodePtr xscrv_node = XmlUtil::GetNode( node, "XSecCurve", 0 );
+    if( xscrv_node )
+    {
+        m_DriverGroup->DecodeXml( xscrv_node );
+        m_ImageFile = XmlUtil::FindString( xscrv_node, "ImageFile", m_ImageFile );
+    }
+
+    return xscrv_node;
+}
+
+
+//==== Copy From ====//
+void XSecCurve::CopyFrom( XSecCurve* from_crv )
+{
+    string lastreset = ParmMgr.ResetRemapID();
+    xmlNodePtr root = xmlNewNode( NULL, ( const xmlChar * )"Vsp_Geometry" );
+
+    from_crv->EncodeXml( root );
+    DecodeXml( root );
+
+    xmlFreeNode( root );
+    ParmMgr.ResetRemapID( lastreset );
+}
+
+bool XSecCurve::DetermineWingType()
+{
     bool wingtype = false;
 
     ParmContainer* pc = GetParentContainerPtr();
@@ -334,98 +546,26 @@ void XSecCurve::Update()
         wingtype = true;
     }
 
-    // Order of these curve modifiers matters.
-    CloseTE( wingtype );
-    TrimTE( wingtype );
-
-    CloseLE( wingtype );
-    TrimLE( wingtype );
-
-    CapTE( wingtype );
-    CapLE( wingtype );
-
-    if ( m_Type != XS_POINT )
-    {
-        double w = GetWidth();
-        double h = GetHeight();
-        if ( w == 0 ) w = 1;
-        if ( h == 0 ) h = 1;
-        double lref = sqrt( w * w + h * h );
-        m_Curve.ToBinaryCubic( wingtype, 1e-6 * lref );
-    }
-
-    RotTransScale();
-
-    if ( m_yscale != 1.0 )
-    {
-        m_Curve.ScaleY( m_yscale );
-    }
-
-    m_LateUpdateFlag = false;
-}
-
-//==== Get Curve ====//
-VspCurve& XSecCurve::GetCurve()
-{
-    if ( m_LateUpdateFlag )
-    {
-        Update();
-    }
-
-    return m_Curve;
-}
-
-//==== Encode XML ====//
-xmlNodePtr XSecCurve::EncodeXml(  xmlNodePtr & node  )
-{
-    ParmContainer::EncodeXml( node );
-    xmlNodePtr xsec_node = xmlNewChild( node, NULL, BAD_CAST "XSecCurve", NULL );
-    if ( xsec_node )
-    {
-        XmlUtil::AddIntNode( xsec_node, "Type", m_Type );
-
-        if( m_ImageFile.size() > 0 )
-        {
-            XmlUtil::AddStringNode( xsec_node, "ImageFile", m_ImageFile );
-        }
-    }
-    return xsec_node;
-}
-
-xmlNodePtr XSecCurve::DecodeXml( xmlNodePtr & node )
-{
-    ParmContainer::DecodeXml( node );
-
-    xmlNodePtr xscrv_node = XmlUtil::GetNode( node, "XSecCurve", 0 );
-    if( xscrv_node )
-    {
-        m_ImageFile = XmlUtil::FindString( xscrv_node, "ImageFile", m_ImageFile );
-    }
-
-    return xscrv_node;
-}
-
-
-//==== Copy From ====//
-void XSecCurve::CopyFrom( XSecCurve* from_crv )
-{
-    string lastreset = ParmMgr.ResetRemapID();
-    xmlNodePtr root = xmlNewNode( NULL, ( const xmlChar * )"Vsp_Geometry" );
-
-    from_crv->EncodeXml( root );
-    DecodeXml( root );
-
-    xmlFreeNode( root );
-    ParmMgr.ResetRemapID( lastreset );
+    return wingtype;
 }
 
 //==== Compute Area ====//
 double XSecCurve::ComputeArea()
 {
     VspCurve curve = GetCurve();
-    vector<vec3d> pnts;
-    curve.TessAdapt( pnts, 1e-3, 10 );
-    return poly_area( pnts );
+    return std::abs( curve.CompArea( vsp::X_DIR, vsp::Y_DIR ) );
+}
+
+// This calculates the area of an XSecCurve based on the current value
+// of m_Curve without calling Update() to ensure the curve is up-to-date.
+//
+// Most callers should call ComputeArea() which ensures a curve is up-to-date
+// before calculating the area.  However, in the context of the nonlinear
+// solver used when area is a driver, we want to calculate the area
+// mid-update (and obviusly without triggering an update).
+double XSecCurve::AreaNoUpdate()
+{
+    return std::abs( m_Curve.CompArea( vsp::X_DIR, vsp::Y_DIR ) );
 }
 
 void XSecCurve::CloseTE( bool wingtype )
@@ -1416,6 +1556,434 @@ void XSecCurve::CapLE( bool wingtype )
     }
 }
 
+void XSecCurve::Chevron()
+{
+    if ( m_ChevronType() == vsp::CHEVRON_NONE ) // Fast path.
+    {
+        m_ChevTopAmplitude.Deactivate();
+        m_ChevBottomAmplitude.Deactivate();
+        m_ChevLeftAmplitude.Deactivate();
+        m_ChevRightAmplitude.Deactivate();
+
+        m_ChevNumber.Deactivate();
+
+        m_ChevOnDuty.Deactivate();
+        m_ChevOffDuty.Deactivate();
+
+        m_PeakRad.Deactivate();
+        m_ValleyRad.Deactivate();
+
+        m_ChevronExtentMode.Deactivate();
+        m_ChevW01StartGuide.Deactivate();
+        m_ChevW01Start.Deactivate();
+        m_ChevW01EndGuide.Deactivate();
+        m_ChevW01End.Deactivate();
+        m_ChevW01CenterGuide.Deactivate();
+        m_ChevW01Center.Deactivate();
+        m_ChevW01Width.Deactivate();
+
+        m_ChevTopAngle.Deactivate();
+        m_ChevBottomAngle.Deactivate();
+        m_ChevRightAngle.Deactivate();
+        m_ChevLeftAngle.Deactivate();
+
+        m_ChevTopSlew.Deactivate();
+        m_ChevBottomSlew.Deactivate();
+        m_ChevRightSlew.Deactivate();
+        m_ChevLeftSlew.Deactivate();
+
+        m_ChevDirAngleAllSymFlag.Deactivate();
+        m_ChevDirAngleTBSymFlag.Deactivate();
+        m_ChevDirAngleRLSymFlag.Deactivate();
+        return;
+    }
+    else
+    {
+        m_ChevTopAmplitude.Activate();
+        m_ChevBottomAmplitude.Activate();
+        m_ChevLeftAmplitude.Activate();
+        m_ChevRightAmplitude.Activate();
+
+        m_ChevNumber.Activate();
+
+        m_ChevOnDuty.Activate();
+        m_ChevOffDuty.Activate();
+
+        m_PeakRad.Activate();
+        m_ValleyRad.Activate();
+
+        m_ChevronExtentMode.Activate();
+        m_ChevW01StartGuide.Activate();
+        m_ChevW01Start.Activate();
+        m_ChevW01EndGuide.Activate();
+        m_ChevW01End.Activate();
+        m_ChevW01CenterGuide.Activate();
+        m_ChevW01Center.Activate();
+        m_ChevW01Width.Activate();
+
+        m_ChevTopAngle.Activate();
+        m_ChevBottomAngle.Activate();
+        m_ChevRightAngle.Activate();
+        m_ChevLeftAngle.Activate();
+
+        m_ChevTopSlew.Activate();
+        m_ChevBottomSlew.Activate();
+        m_ChevRightSlew.Activate();
+        m_ChevLeftSlew.Activate();
+
+        m_ChevDirAngleAllSymFlag.Activate();
+        m_ChevDirAngleTBSymFlag.Activate();
+        m_ChevDirAngleRLSymFlag.Activate();
+    }
+
+    // Make sure duty cycles can't exceed 1.0.
+    m_ChevOnDuty.SetUpperLimit( 0.999 - m_ChevOffDuty() );
+    m_ChevOffDuty.SetUpperLimit( 0.999 - m_ChevOnDuty() );
+
+    // Do calculations in local doubles because Parms are limited to [0, 1] and negative intermediates are needed.
+    double startW = m_ChevW01Start();
+    double endW = m_ChevW01End();
+    double centerW = m_ChevW01Center();
+    double widthW = m_ChevW01Width();
+
+    if ( m_ChevronType() == vsp::CHEVRON_PARTIAL )
+    {
+        if ( m_ChevW01StartGuide() != vsp::W_FREE )
+            startW = ( (double) m_ChevW01StartGuide() ) / 4.0;
+
+        if ( m_ChevW01EndGuide() != vsp::W_FREE )
+            endW = ( (double) m_ChevW01EndGuide() ) / 4.0;
+
+        if ( m_ChevW01CenterGuide() != vsp::W_FREE )
+            centerW = ( (double) m_ChevW01CenterGuide() ) / 4.0;
+
+        if ( m_ChevronExtentMode() == CHEVRON_W01_SE )
+        {
+            widthW = endW - startW;
+            if (widthW < 0.0 )
+            {
+                widthW = widthW + 1.0;
+            }
+
+            centerW = startW + widthW / 2.0;
+            if (centerW < 0.0 )
+            {
+                centerW = centerW + 1.0;
+            }
+            else if (centerW > 1.0 )
+            {
+                centerW = centerW - 1.0;
+            }
+
+            m_ChevW01Center.Deactivate();
+            m_ChevW01Width.Deactivate();
+
+            if ( m_ChevW01StartGuide() != vsp::W_FREE )
+                m_ChevW01Start.Deactivate();
+
+            if ( m_ChevW01EndGuide() != vsp::W_FREE )
+                m_ChevW01End.Deactivate();
+
+            m_ChevW01CenterGuide.Deactivate();
+        }
+        else if ( m_ChevronExtentMode() == CHEVRON_W01_CW )
+        {
+            startW = centerW - widthW / 2.0;
+            if (startW < 0.0 )
+            {
+                startW = startW + 1.0;
+            }
+
+            endW = centerW + widthW / 2.0;
+            if (endW > 1.0 )
+            {
+                endW = endW - 1.0;
+            }
+            m_ChevW01Start.Deactivate();
+            m_ChevW01End.Deactivate();
+
+            if ( m_ChevW01CenterGuide() != vsp::W_FREE )
+                m_ChevW01Center.Deactivate();
+
+            m_ChevW01StartGuide.Deactivate();
+            m_ChevW01EndGuide.Deactivate();
+        }
+    }
+    else if ( m_ChevronType() == vsp::CHEVRON_FULL )
+    {
+        endW = startW + 1.0;
+        centerW = 0.5;
+        widthW = 1.0;
+
+        m_ChevW01StartGuide = vsp::W_RIGHT_0;
+        m_ChevW01EndGuide = vsp::W_RIGHT_1;
+        m_ChevW01CenterGuide = vsp::W_LEFT;
+
+        m_ChevW01StartGuide.Deactivate();
+        m_ChevW01EndGuide.Deactivate();
+        m_ChevW01CenterGuide.Deactivate();
+
+        m_ChevronExtentMode.Deactivate();
+        m_ChevW01End.Deactivate();
+        m_ChevW01Center.Deactivate();
+        m_ChevW01Width.Deactivate();
+    }
+
+    // Set parameters to consistent values from calculations.
+    m_ChevW01Start = startW;
+    m_ChevW01End = endW;
+    m_ChevW01Center = centerW;
+    m_ChevW01Width = widthW;
+
+    if ( m_ChevDirAngleAllSymFlag() )
+    {
+        m_ChevBottomAmplitude = m_ChevTopAmplitude();
+        m_ChevLeftAmplitude = m_ChevTopAmplitude();
+        m_ChevRightAmplitude = m_ChevTopAmplitude();
+
+        m_ChevBottomAngle = m_ChevTopAngle();
+        m_ChevRightAngle = m_ChevTopAngle();
+        m_ChevLeftAngle = m_ChevTopAngle();
+
+        m_ChevBottomSlew = m_ChevTopSlew();
+        m_ChevRightSlew = m_ChevTopSlew();
+        m_ChevLeftSlew = m_ChevTopSlew();
+
+        m_ChevBottomAmplitude.Deactivate();
+        m_ChevLeftAmplitude.Deactivate();
+        m_ChevRightAmplitude.Deactivate();
+
+        m_ChevBottomAngle.Deactivate();
+        m_ChevRightAngle.Deactivate();
+        m_ChevLeftAngle.Deactivate();
+
+        m_ChevBottomSlew.Deactivate();
+        m_ChevRightSlew.Deactivate();
+        m_ChevLeftSlew.Deactivate();
+
+        m_ChevDirAngleTBSymFlag.Deactivate();
+        m_ChevDirAngleRLSymFlag.Deactivate();
+    }
+
+    if ( m_ChevDirAngleTBSymFlag() )
+    {
+        m_ChevBottomAmplitude = m_ChevTopAmplitude();
+        m_ChevBottomAngle = m_ChevTopAngle();
+        m_ChevBottomSlew = m_ChevTopSlew();
+
+        m_ChevBottomAmplitude.Deactivate();
+        m_ChevBottomAngle.Deactivate();
+        m_ChevBottomSlew.Deactivate();
+    }
+
+    if ( m_ChevDirAngleRLSymFlag() )
+    {
+        m_ChevLeftAmplitude = m_ChevRightAmplitude();
+        m_ChevLeftAngle = m_ChevRightAngle();
+        m_ChevLeftSlew = m_ChevRightSlew();
+
+        m_ChevLeftAmplitude.Deactivate();
+        m_ChevLeftAngle.Deactivate();
+        m_ChevLeftSlew.Deactivate();
+    }
+
+    // Set up chevron curve as if start is always at 0.0.
+    // This simplifies some of the logic including determing how many points are needed to define curve.
+    int ptpercycle = 2;
+    int peakpercycle = 1;
+    int valleypercycle = 1;
+    if ( m_ChevOnDuty() > 0.0 )
+    {
+        ptpercycle ++;
+        peakpercycle ++;
+    }
+    if ( m_ChevOffDuty() > 0.0 )
+    {
+        ptpercycle += 2;
+        valleypercycle ++;
+    }
+    int npt = m_ChevNumber() * ptpercycle + 1;
+
+    int iextra = 0;
+    if ( m_ChevW01Width() != 1.0 ) // Add one to finish off partial extents
+    {
+        npt ++;
+        iextra ++;
+    }
+
+    vector < vec3d > pts( npt );
+    vector < double > bump( npt, 0.0 );
+    vector < double > ts( npt, 0.0 );
+
+    vector < double > uvalley( valleypercycle * m_ChevNumber() + iextra, -1 );
+    vector < double > upeak( peakpercycle * m_ChevNumber(), -1 );
+
+    double dt = 4.0 * (widthW / m_ChevNumber() ); // Time of full period.
+    double dtoff = dt * m_ChevOffDuty();          // Time off.
+    double dtoff2 = dtoff * 0.5;                  // Half of time off.
+    double dton = dt * m_ChevOnDuty();            // Time on.
+    double dtrise = 0.5 * ( dt - dtoff - dton );  // Time for rise or fall.
+    double t0 = 0.0;
+
+    // First point is set to ts[0] = 0, bump[0] = 0.
+    int ipt = 1;
+    int ivalley = 0;
+    int ipeak = 0;
+    for ( int i = 0; i < m_ChevNumber(); i++ )
+    {
+        if ( m_ChevOffDuty() > 0.0 )
+        {
+            t0 += dtoff2;
+            ts[ipt] = t0;
+            bump[ipt] = 0.0; // Can skip as already off
+            ipt ++;
+        }
+
+        uvalley[ivalley] = t0;
+        ivalley ++;
+
+        t0 += dtrise;
+        ts[ipt] = t0;
+        bump[ipt] = 1.0;
+        ipt ++;
+
+        upeak[ipeak] = t0;
+        ipeak++;
+
+        if ( m_ChevOnDuty() > 0.0 )
+        {
+            t0 += dton;
+            ts[ipt] = t0;
+            bump[ipt] = 1.0;
+            ipt ++;
+            upeak[ipeak] = t0;
+            ipeak++;
+        }
+
+        t0 += dtrise;
+        ts[ipt] = t0;
+        bump[ipt] = 0.0;
+        ipt ++;
+
+        if ( m_ChevOffDuty() > 0.0 )
+        {
+            uvalley[ivalley] = t0;
+            ivalley ++;
+            t0 += dtoff2;
+            ts[ipt] = t0;
+            bump[ipt] = 0.0; // Can skip as already off
+            ipt ++;
+        }
+    }
+
+    if ( m_ChevW01Width() < 1.0 )
+    {
+        if ( m_ChevOffDuty() == 0.0 )
+        {
+            uvalley[ivalley] = t0;
+            ivalley ++;
+        }
+    }
+    ts[npt - 1] = 4.0; // Make sure last point is at 4.0.
+
+    // Spin (shift in W) base curve to start of chevrons.
+    if ( m_ChevW01Start() != 0.0 )
+    {
+        m_Curve.Spin01( m_ChevW01Start() );
+    }
+
+    // Build control curve.
+    vector< curve_point_type > angles(5);
+    angles[0] << m_ChevRightAngle() * PI / 180.0, m_ChevRightSlew() * PI / 180.0, 0.0;
+    angles[1] << m_ChevBottomAngle() * PI / 180.0, -m_ChevBottomSlew() * PI / 180.0, 0.0;
+    angles[2] << m_ChevLeftAngle() * PI / 180.0, -m_ChevLeftSlew() * PI / 180.0, 0.0;
+    angles[3] << m_ChevTopAngle() * PI / 180.0, m_ChevTopSlew() * PI / 180.0, 0.0;
+    angles[4] << angles[0];
+
+    vector< curve_point_type > amplitudes(5);
+    amplitudes[0] << m_ChevRightAmplitude(), 0.0, 0.0;
+    amplitudes[1] << m_ChevBottomAmplitude(), 0.0, 0.0;
+    amplitudes[2] << m_ChevLeftAmplitude(), 0.0, 0.0;
+    amplitudes[3] << m_ChevTopAmplitude(), 0.0, 0.0;
+    amplitudes[4] << amplitudes[0];
+
+    // Set up cubic spline of desired controls
+    piecewise_cubic_spline_creator_type pcc( 4 );
+    piecewise_linear_creator_type plc( 4 );
+    pcc.set_t0( 0 );
+    plc.set_t0( 0 );
+    for ( unsigned int i = 0; i < 4; ++i)
+    {
+        pcc.set_segment_dt( 1.0, i );
+        plc.set_segment_dt( 1.0, i );
+    }
+
+    pcc.set_closed_cubic_spline( angles.begin() );
+    for ( unsigned int i = 0; i < 5; ++i)
+    {
+        plc.set_corner( amplitudes[i], i);
+    }
+
+    // Build control curve.
+    piecewise_curve_type angle_crv;
+    pcc.create( angle_crv );
+    piecewise_curve_type amplitude_crv;
+    plc.create( amplitude_crv );
+
+    for ( int i = 0; i < pts.size(); i++ )
+    {
+        // Parameter on un-shifted curve.
+        double s = ts[i] + 4.0 * m_ChevW01Start();
+        if ( s < 0.0 ) s += 4.0;
+        if ( s > 4.0 ) s -= 4.0;
+
+        curve_point_type angle = angle_crv.f( s );
+        curve_point_type amplitude = amplitude_crv.f( s );
+
+        Matrix4d basis;
+        vec3d dum1, dum2, dir;
+        // Mimic the construction of the skinning angle with a fake circle
+        basis.rotate( 2.0 * PI * s / 4.0, vec3d(0.0, 0.0, 1.0 ) );
+        basis.rotate( -angle.x(), vec3d( 0.0, 1.0, 0.0 ) );
+        basis.rotate( -angle.y(), vec3d( 1.0, 0.0, 0.0 ) );
+
+        // Pull out desired normal and tangent directions.
+        basis.getBasis( dum1, dum2, dir );
+
+        pts[i] = bump[i] * amplitude.x() * dir;
+    }
+
+    VspCurve chevron;
+    chevron.InterpolateLinear( pts, ts, false );
+
+    // Superimpose curves and set result.
+    piecewise_curve_type crv, new_crv, chev_crv;
+    crv = m_Curve.GetCurve();
+    chev_crv = chevron.GetCurve();
+
+    crv.match_pmap( chev_crv ); // Modifies both piecewise curves to have identical pmap.
+    new_crv.sum( crv, chev_crv ); // Promotes segments as needed to required order.
+
+    // Set resultant curve (still shifted to start of chevrons.)
+    m_Curve.SetCurve( new_crv );
+
+    if (m_ValleyRad() != 0 )
+    {
+        m_Curve.RoundJoints( m_ValleyRad(), uvalley );
+    }
+
+    if ( m_PeakRad() != 0 )
+    {
+        m_Curve.RoundJoints( m_PeakRad(), upeak );
+    }
+
+    // Un-do spin to restore curve starting point.
+    if ( m_ChevW01Start() != 0.0 )
+    {
+        m_Curve.Spin01( 1.0 - m_ChevW01Start() );
+    }
+}
+
 void XSecCurve::RotTransScale()
 {
 
@@ -1512,7 +2080,7 @@ PointXSec::PointXSec( ) : XSecCurve( )
 }
 
 //==== Update Geometry ====//
-void PointXSec::Update()
+void PointXSec::UpdateCurve( bool updateParms )
 {
     piecewise_curve_type c;
     curve_point_type pt;
@@ -1535,8 +2103,6 @@ void PointXSec::Update()
     else
     {
         m_Curve.SetCurve( c );
-
-        XSecCurve::Update();
     }
 }
 //==========================================================================//
@@ -1546,6 +2112,21 @@ void PointXSec::Update()
 //==== Constructor ====//
 CircleXSec::CircleXSec( ) : XSecCurve( )
 {
+    if( m_DriverGroup )
+    {
+        // m_DriverGroup was initialized in the XSecCurve() constructor.  However, we want to use a different
+        // DriverGroup type for Circle.
+        delete m_DriverGroup;
+    }
+
+    m_DriverGroup = new DXSecCurveDriverGroup();
+
+    XSecCurveDriverGroup *xscdg = dynamic_cast< XSecCurveDriverGroup* > ( m_DriverGroup );
+    if ( xscdg )
+    {
+        xscdg->m_Parent = this;
+    }
+
     m_Type = XS_CIRCLE;
     m_Diameter.Init( "Circle_Diameter", m_GroupName, this, 1.0, 0.0, 1.0e12 );
     m_Diameter.SetDescript( "Diameter of Circle Cross-Section" );
@@ -1557,6 +2138,17 @@ void CircleXSec::SetWidthHeight( double w, double h )
     m_Diameter  = ( w + h ) / 2.0;
 }
 
+//==== Get Driver Parms ====//
+vector< string > CircleXSec::GetDriverParms()
+{
+    vector< string > parm_ids;
+    parm_ids.resize( vsp::CIRCLE_NUM_XSEC_DRIVER );
+    parm_ids[ vsp::WIDTH_XSEC_DRIVER ] = GetWidthParmID();
+    parm_ids[ vsp::AREA_XSEC_DRIVER ] = m_Area.GetID();
+
+    return parm_ids;
+}
+
 void CircleXSec::OffsetCurve( double off )
 {
     m_Diameter = m_Diameter() - 2.0*off;
@@ -1564,6 +2156,24 @@ void CircleXSec::OffsetCurve( double off )
 
 //==== Update Geometry ====//
 void CircleXSec::Update()
+{
+    // Circle can have invalid drivers if it was recently converted from another XSecCurve type.  A curve that was
+    // previously an ellipse (for example) may have had drivers set to Area and HWRatio.  The conversion calls
+    // XSec::CopyFrom() to transfer parameters as best it can.  This includes a direct transfer of the drivers,
+    // no matter whether they make sense or not.
+    // The reverse conversion is OK because the non-circle driver groups are initialized with Width, Height.  When
+    // converting from a circle, only the first of these is over-written -- either with Width or Area.
+    // Consequently, any combination is valid.
+
+    if ( !m_DriverGroup->ValidDrivers( m_DriverGroup->GetChoices() ) )
+    {
+        m_DriverGroup->SetChoice( 0, WIDTH_XSEC_DRIVER );
+    }
+
+    XSecCurve::Update();
+}
+
+void CircleXSec::UpdateCurve( bool updateParms )
 {
     piecewise_curve_type c;
     piecewise_circle_creator pcc( 4 );
@@ -1588,8 +2198,6 @@ void CircleXSec::Update()
     {
         c.reverse();
         m_Curve.SetCurve( c );
-
-        XSecCurve::Update();
     }
 }
 
@@ -1609,7 +2217,7 @@ EllipseXSec::EllipseXSec( ) : XSecCurve( )
 }
 
 //==== Update Geometry ====//
-void EllipseXSec::Update()
+void EllipseXSec::UpdateCurve( bool updateParms )
 {
     piecewise_curve_type c;
     piecewise_ellipse_creator pec( 4 );
@@ -1635,8 +2243,6 @@ void EllipseXSec::Update()
     {
         c.reverse();
         m_Curve.SetCurve( c );
-
-        XSecCurve::Update();
     }
 }
 
@@ -1674,7 +2280,7 @@ SuperXSec::SuperXSec( ) : XSecCurve( )
 }
 
 //==== Update Geometry ====//
-void SuperXSec::Update()
+void SuperXSec::UpdateCurve( bool updateParms )
 {
     piecewise_curve_type c;
     piecewise_superellipse_creator psc( 16 );
@@ -1711,8 +2317,6 @@ void SuperXSec::Update()
     {
         c.reverse();
         m_Curve.InterpolateEqArcLenPCHIP( c );
-
-        XSecCurve::Update();
     }
 }
 
@@ -1751,20 +2355,51 @@ RoundedRectXSec::RoundedRectXSec( ) : XSecCurve( )
 
     m_Height.Init( "RoundedRect_Height", m_GroupName, this, 1.0, 0.0, 1.0e12 );
     m_Width.Init( "RoundedRect_Width", m_GroupName, this,  1.0, 0.0, 1.0e12 );
-    m_Radius.Init( "RoundRectXSec_Radius", m_GroupName,  this,  0.2, 0.0, 1.0e12 );
-    m_Skew.Init("RoundRect_Skew", m_GroupName, this, 0.0, -10, 10);
+    m_RadiusSymmetryType.Init( "RoundedRect_RadiusSymmetryType", m_GroupName, this, vsp::SYM_ALL, vsp::SYM_NONE, vsp::SYM_ALL );
+    m_RadiusBR.Init( "RoundRectXSec_RadiusBR", m_GroupName, this, 0.2, 0.0, 1.0e12 );
+    m_RadiusBL.Init( "RoundRectXSec_RadiusBL", m_GroupName, this, 0.2, 0.0, 1.0e12 );
+    m_RadiusTL.Init( "RoundRectXSec_RadiusTL", m_GroupName, this, 0.2, 0.0, 1.0e12 );
+    m_RadiusTR.Init( "RoundRectXSec_Radius", m_GroupName, this, 0.2, 0.0, 1.0e12 ); // Primary radius if SYM_ALL
+    m_Skew.Init("RoundRect_Skew", m_GroupName, this, 0.0, -1e6, 1e6 );
     m_Keystone.Init("RoundRect_Keystone", m_GroupName, this, 0.5, 0.0, 1.0 );
     m_KeyCornerParm.Init( "RoundRectXSec_KeyCorner", m_GroupName, this, true, 0, 1 );
+    m_VSkew.Init( "RoundRect_VSkew", m_GroupName, this, 0.0, -1e6, 1e6 );
 }
 
 //==== Update Geometry ====//
-void RoundedRectXSec::Update()
+void RoundedRectXSec::UpdateCurve( bool updateParms )
 {
-    double r = m_Curve.CreateRoundedRectangle( m_Width(), m_Height(), m_Keystone(), m_Skew(), m_Radius(), m_KeyCornerParm() );
-    m_Radius.Set( r );
+    double r1 = m_RadiusBR();
+    double r2 = m_RadiusBL();
+    double r3 = m_RadiusTL();
+    double r4 = m_RadiusTR();
 
-    XSecCurve::Update();
-    return;
+    if ( m_RadiusSymmetryType() == vsp::SYM_ALL )
+    {
+        r1 = r4;
+        r2 = r4;
+        r3 = r4;
+    }
+    else if ( m_RadiusSymmetryType() == vsp::SYM_TB )
+    {
+        r2 = r3;
+        r1 = r4;
+    }
+    else if ( m_RadiusSymmetryType() == vsp::SYM_RL )
+    {
+        r2 = r1;
+        r3 = r4;
+    }
+
+    m_Curve.CreateRoundedRectangle( m_Width(), m_Height(), m_Keystone(), m_Skew(), m_VSkew(), r1, r2, r3, r4, m_KeyCornerParm() );
+
+    if ( updateParms )
+    {
+        m_RadiusBR.Set( r1 );
+        m_RadiusBL.Set( r2 );
+        m_RadiusTL.Set( r3 );
+        m_RadiusTR.Set( r4 );
+    }
 }
 
 //==== Build Box of Even Spaced Points ====//
@@ -1779,7 +2414,10 @@ void RoundedRectXSec::SetScale( double scale )
 {
     XSecCurve::SetScale( scale );
 
-    m_Radius.Set( m_Radius() * scale );
+    m_RadiusBR.Set( m_RadiusBR() * scale );
+    m_RadiusBL.Set( m_RadiusBL() * scale );
+    m_RadiusTL.Set( m_RadiusTL() * scale );
+    m_RadiusTR.Set( m_RadiusTR() * scale );
 }
 
 void RoundedRectXSec::ReadV2FileFuse2( xmlNodePtr &root )
@@ -1790,11 +2428,11 @@ void RoundedRectXSec::ReadV2FileFuse2( xmlNodePtr &root )
 
     if ( v2type == FuselageGeom::V2_FXS_RND_BOX )
     {
-        m_Radius = XmlUtil::FindDouble( root, "Corner_Radius", m_Radius() );
+        m_RadiusTR = XmlUtil::FindDouble( root, "Corner_Radius", m_RadiusTR() );
     }
     else
     {
-        m_Radius = 0.0;
+        m_RadiusTR = 0.0;
     }
 }
 
@@ -1806,11 +2444,56 @@ void RoundedRectXSec::Interp( XSecCurve *start, XSecCurve *end, double frac )
 
     if ( s && e )
     {
-        INTERP_PARM( s, e, frac, m_Radius );
+        INTERP_PARM( s, e, frac, m_RadiusBR );
+        INTERP_PARM( s, e, frac, m_RadiusBL );
+        INTERP_PARM( s, e, frac, m_RadiusTL );
+        INTERP_PARM( s, e, frac, m_RadiusTR );
         INTERP_PARM( s, e, frac, m_Skew );
+        INTERP_PARM( s, e, frac, m_VSkew );
         INTERP_PARM( s, e, frac, m_Keystone );
     }
     XSecCurve::Interp( start, end, frac );
+}
+
+EditCurveXSec* RoundedRectXSec::ConvertToEdit()
+{
+    // Create curve without rounded corners.
+    VspCurve vsp_curve;
+    vsp_curve.CreateRoundedRectangle( m_Width(), m_Height(), m_Keystone(), m_Skew(), m_VSkew(), 0.0, 0.0, 0.0, 0.0, m_KeyCornerParm() );
+
+    vector < vec3d > point_vec;
+    vector < double > param_vec;
+    vsp_curve.GetLinearControlPoints( point_vec, param_vec );
+
+    double offset = GetWidth() / 2;
+
+    vector < double > r_vec( param_vec.size(), 0.0 );
+    for ( size_t i = 0; i < param_vec.size(); i++ )
+    {
+        param_vec[i] = param_vec[i] / 4.0; // Store point parameter (0-1) internally
+        // Shift by 1/2 width and nondimensionalize
+        point_vec[i].set_x( ( point_vec[i].x() - offset ) / max( GetWidth(), 1E-9 ) );
+        point_vec[i].set_y( point_vec[i].y() / max( GetHeight(), 1E-9 ) );
+    }
+
+    r_vec[1] = m_RadiusBR();
+    r_vec[3] = m_RadiusBL();
+    r_vec[5] = m_RadiusTL();
+    r_vec[7] = m_RadiusTR();
+
+    EditCurveXSec* xscrv_ptr = new EditCurveXSec();
+
+    xscrv_ptr->CopyFrom( this );
+    xscrv_ptr->m_SymType.Set( vsp::SYM_NONE );
+    xscrv_ptr->m_CurveType = vsp::LINEAR;
+
+    // Transfer width and height parm values
+    xscrv_ptr->SetWidthHeight( GetWidth(), GetHeight() );
+
+    // Set Bezier control points
+    xscrv_ptr->SetPntVecs( param_vec, point_vec, r_vec );
+
+    return xscrv_ptr;
 }
 
 //==========================================================================//
@@ -1842,7 +2525,7 @@ void GeneralFuseXSec::SetWidthHeight( double w, double h )
 }
 
 //==== Update Geometry ====//
-void GeneralFuseXSec::Update()
+void GeneralFuseXSec::UpdateCurve( bool updateParms )
 {
     double x, y;
     //==== Top Control Points ====//
@@ -1913,8 +2596,6 @@ void GeneralFuseXSec::Update()
         m_Curve.RoundJoint( m_CornerRad() * m_Height(), 2 );
         m_Curve.RoundJoint( m_CornerRad() * m_Height(), 0 );
     }
-
-    XSecCurve::Update();
 }
 
 void GeneralFuseXSec::ReadV2FileFuse2( xmlNodePtr &root )
@@ -1983,7 +2664,7 @@ void FileXSec::SetWidthHeight( double w, double h )
 }
 
 //==== Update Geometry ====//
-void FileXSec::Update()
+void FileXSec::UpdateCurve( bool updateParms )
 {
     //==== Scale File Points ====//
     vector< vec3d > scaled_file_pnts;
@@ -2068,8 +2749,6 @@ void FileXSec::Update()
     }
 
     m_Curve.InterpolatePCHIP( scaled_file_pnts, arclen, true );
-
-    XSecCurve::Update();
 }
 
 //==== Encode XML ====//
@@ -2338,7 +3017,7 @@ void FileXSec::ReadV2FileFuse2( xmlNodePtr &root )
             vector < vec3d > pnt_vec;
             for ( int i = 0; i < num_pnts; i++ )
             {
-                pnt_vec.push_back( vec3d( arry[i], arrz[i], 0.0 ) );
+                pnt_vec.push_back( vec3d( arry[i] * m_Width() * 0.5, arrz[i] * m_Height() * 0.5, 0.0 ) );
                 if ( std::abs( arrz[i] ) < std::abs( arrz[izzero] ) )
                 {
                     izzero = i;
@@ -2347,7 +3026,7 @@ void FileXSec::ReadV2FileFuse2( xmlNodePtr &root )
             // Mirror points, do not repeat any points.
             for ( int i = num_pnts - 2; i > 0; i-- )
             {
-                pnt_vec.push_back( vec3d( -arry[i], arrz[i], 0.0 ) );
+                pnt_vec.push_back( vec3d( -arry[i] * m_Width() * 0.5, arrz[i] * m_Height() * 0.5, 0.0 ) );
             }
 
             free( arry );
@@ -2372,6 +3051,9 @@ EditCurveXSec::EditCurveXSec() : XSecCurve()
 {
     m_Type = XS_EDIT_CURVE;
 
+    m_View.Init( "View", m_GroupName, this, vsp::VIEW_FRONT, vsp::VIEW_LEFT, vsp::VIEW_NUM_TYPES - 1 );
+    m_View.SetDescript( "View direction" );
+
     m_CloseFlag.Init( "CloseFlag", m_GroupName, this, true, false, true );
     m_CloseFlag.SetDescript( "Closed Curve Flag" );
 
@@ -2380,6 +3062,9 @@ EditCurveXSec::EditCurveXSec() : XSecCurve()
 
     m_ShapeType.Init( "ShapeType", m_GroupName, this, EDIT_XSEC_CIRCLE, EDIT_XSEC_CIRCLE, EDIT_XSEC_RECTANGLE );
     m_ShapeType.SetDescript( "Initial Shape Type" );
+
+    m_Depth.Init( "Depth", m_GroupName, this, 1.0, 1.0e-12, 1.0e12 );
+    m_Depth.SetDescript( "Edit Curve XSec Depth" );
 
     m_Width.Init( "Width", m_GroupName, this, 1.0, 1.0e-12, 1.0e12 );
     m_Width.SetDescript( "Edit Curve XSec Width" );
@@ -2399,16 +3084,17 @@ EditCurveXSec::EditCurveXSec() : XSecCurve()
     m_AbsoluteFlag.Init( "AbsoluteFlag", m_GroupName, this, false, false, true );
     m_AbsoluteFlag.SetDescript( "Flag indicating if control points are non-dimensional or absolute" );
 
-    m_PreserveARFlag.Init( "PreserveARFlag", m_GroupName, this, false, false, true );
-    m_PreserveARFlag.SetDescript( "Flag to preserve width to height aspect ratio" );
+    m_XSecPointSize.Init( "XSecPointSize", ( m_GroupName + "_Background" ), this, 8.0, 1e-4, 1e4 );
+    m_XSecLineThickness.Init( "XSecLineThickness", ( m_GroupName + "_Background" ), this, 1.5, 1e-4, 1e4 );
 
-    m_XSecPointSize.Init( "XSecPointSize", ( m_GroupName + "_Background" ), NULL, 8.0, 1e-4, 1e4 );
-    m_XSecLineThickness.Init( "XSecLineThickness", ( m_GroupName + "_Background" ), NULL, 1.5, 1e-4, 1e4 );
+    m_XSecPointColorFlag.Init( "XSecPointColorFlag", ( m_GroupName + "_Background" ), this, false, false, true );
+    m_XSecPointColorFlag.SetDescript( "Flag to color XSec points" );
+
+    m_XSecPointColorWheel.Init( "XSecPointColorWheel", ( m_GroupName + "_Background" ), this, -1, -1, 359 );
+    m_XSecPointColorWheel.SetDescript( "Color wheel index for XS_EDIT_CURVE points" );
 
     m_SelectPntID = 0;
     m_EnforceG1Next = true;
-
-    m_AspectRatio = 1.0;
 }
 
 void EditCurveXSec::ParmChanged( Parm* parm_ptr, int type )
@@ -2424,19 +3110,15 @@ void EditCurveXSec::ParmChanged( Parm* parm_ptr, int type )
         }
     }
 
-    if ( parm_ptr == dynamic_cast<Parm*> ( &m_PreserveARFlag ) )
-    {
-        m_AspectRatio = GetWidth() / GetHeight();
-    }
-
     if ( m_CurveType() == vsp::CEDIT )
     {
         for ( size_t i = 0; i < m_UParmVec.size(); i++ )
         {
             Parm* x_parm = dynamic_cast<Parm*> ( m_XParmVec[i] );
             Parm* y_parm = dynamic_cast<Parm*> ( m_YParmVec[i] );
+            Parm* z_parm = dynamic_cast<Parm*> ( m_ZParmVec[i] );
 
-            if ( parm_ptr == x_parm || parm_ptr == y_parm )
+            if ( parm_ptr == x_parm || parm_ptr == y_parm || parm_ptr == z_parm )
             {
                 // Identify if next or previous control point is master G1 enforcer
                 if ( i % 3 == 1 )
@@ -2458,7 +3140,7 @@ void EditCurveXSec::ParmChanged( Parm* parm_ptr, int type )
                         // Adjust the X coordinates of the neighboring control points only. Parm for point on the curve already updated
                         double dx = x_parm->Get() - x_parm->GetLastVal();
 
-                        MovePnt( x_parm->Get() + dx, y_parm->Get(), true );
+                        MovePnt( x_parm->Get() + dx, y_parm->Get(), z_parm->Get(), true );
 
                         SetSelectPntID( prev_index );
                     }
@@ -2470,7 +3152,19 @@ void EditCurveXSec::ParmChanged( Parm* parm_ptr, int type )
                         // Adjust the Y coordinates of the neighboring control points. Parm for point on the curve already updated
                         double dy = y_parm->Get() - y_parm->GetLastVal();
 
-                        MovePnt( x_parm->Get(), y_parm->Get() + dy, true );
+                        MovePnt( x_parm->Get(), y_parm->Get() + dy, z_parm->Get(), true );
+
+                        SetSelectPntID( prev_index );
+                    }
+                    else if ( parm_ptr == z_parm )
+                    {
+                        int prev_index = GetSelectedPntID();
+                        SetSelectPntID( i );
+
+                        // Adjust the Z coordinates of the neighboring control points. Parm for point on the curve already updated
+                        double dz = z_parm->Get() - z_parm->GetLastVal();
+
+                        MovePnt( x_parm->Get(), y_parm->Get(), z_parm->Get() + dz, true );
 
                         SetSelectPntID( prev_index );
                     }
@@ -2481,15 +3175,7 @@ void EditCurveXSec::ParmChanged( Parm* parm_ptr, int type )
         }
     }
 
-    if ( type != Parm::SET )
-    {
-        if ( parm_ptr == &m_Height && m_PreserveARFlag() )
-        {
-            // Enforce AR preservation if height is set from API
-            m_Width.Set( m_Height() * m_AspectRatio );
-        }
-    }
-    else
+    if ( type == Parm::SET )
     {
         m_LateUpdateFlag = true;
 
@@ -2540,10 +3226,6 @@ xmlNodePtr EditCurveXSec::DecodeXml( xmlNodePtr & node )
     }
 
     XSecCurve::DecodeXml( node );
-
-    // Must be done after the parms are decoded. Otherwise they are calculated when the 
-    // m_PreserveARFlag is decoded, but width has not been (alphabetical decode order)
-    m_AspectRatio = GetWidth() / GetHeight();
 
     return node;
 }
@@ -2671,22 +3353,26 @@ void EditCurveXSec::InitShape()
 
     vector < double > ctrl_pnts_x( ctrl_pnts.size() );
     vector < double > ctrl_pnts_y( ctrl_pnts.size() );
-    vector < double > u_vec( t_vec.size() ); // Set control pont parameter values (0-4), but show the user (0-1)
+    vector < double > ctrl_pnts_z( ctrl_pnts.size() );
+    vector < double > u_vec( t_vec.size() ); // Set control point parameter values (0-4), but show the user (0-1)
+    vector < double > r_vec( t_vec.size() );
 
     for ( size_t i = 0; i < ctrl_pnts.size(); i++ )
     {
         ctrl_pnts_x[i] = ctrl_pnts[i].x();
         ctrl_pnts_y[i] = ctrl_pnts[i].y();
+        ctrl_pnts_z[i] = ctrl_pnts[i].z();
         u_vec[i] = t_vec[i] / 4.0;
+        r_vec[i] = 0.0;
     }
 
     m_SelectPntID = 0; // Ensure selected point is not greater than # of control points
 
     //==== Load Control Points ====//
-    SetPntVecs( u_vec, ctrl_pnts_x, ctrl_pnts_y ); // initialize all 
+    SetPntVecs( u_vec, ctrl_pnts_x, ctrl_pnts_y, ctrl_pnts_z, r_vec ); // initialize all
 }
 
-void EditCurveXSec::AddPt( double default_u, double default_x, double default_y, bool default_g1, bool default_fix_u )
+void EditCurveXSec::AddPt( double default_u, double default_x, double default_y, double default_z, double default_r, bool default_g1, bool default_fix_u )
 {
     Parm* p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
     if ( p )
@@ -2721,6 +3407,28 @@ void EditCurveXSec::AddPt( double default_u, double default_x, double default_y,
         m_YParmVec.push_back( fp );
     }
 
+    fp = (FractionParm*)ParmMgr.CreateParm( vsp::PARM_FRACTION_TYPE );
+    if ( fp )
+    {
+        int i = (int)m_ZParmVec.size();
+        char str[15];
+        sprintf( str, "Z_%d", i );
+        fp->Init( string( str ), m_GroupName, this, default_z, -1.0e12, 1.0e12 );
+        fp->SetDescript( "Control Point 2D Z Location" );
+        m_ZParmVec.push_back( fp );
+    }
+
+    p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
+    if ( p )
+    {
+        int i = (int)m_RParmVec.size();
+        char str[15];
+        sprintf( str, "R_%d", i );
+        p->Init( string( str ), m_GroupName, this, default_r, 0.0, 1e12 );
+        p->SetDescript( "Corner radius parameter" );
+        m_RParmVec.push_back( p );
+    }
+
     BoolParm* bp = dynamic_cast< BoolParm* >( ParmMgr.CreateParm( vsp::PARM_BOOL_TYPE ) );
     if ( bp )
     {
@@ -2745,18 +3453,13 @@ void EditCurveXSec::AddPt( double default_u, double default_x, double default_y,
 }
 
 //==== Update Geometry ====//
-void EditCurveXSec::Update()
+void EditCurveXSec::UpdateCurve( bool updateParms )
 {
     if ( m_UParmVec.empty() )
     {
         InitShape(); // Must always have a valid curve
     }
 
-    if ( m_PreserveARFlag() )
-    {
-        m_Height.Set( m_Width() / m_AspectRatio );
-    }
-    
     ClearPtOrder();
 
     EnforcePtOrder();
@@ -2769,38 +3472,73 @@ void EditCurveXSec::Update()
     // Enforce Closure
     EnforceClosure();
 
-    vector< vec3d > ctrl_pnts = GetCtrlPntVec( false );
-    vector < double > t_vec = GetTVec(); // Set control pont parameter values (0-4), but show the user (0-1)
+    UpdateG1Parms();
 
-    switch ( m_CurveType() )
+    vector < double > t_vec = GetTVec(); // Set control point parameter values (0-4), but show the user (0-1)
+
+    if ( m_CurveType() == vsp::LINEAR )
     {
-        case vsp::LINEAR:
-            m_Curve.InterpolateLinear( ctrl_pnts, t_vec, false );
-            break;
-        case vsp::PCHIP:
-            if ( ctrl_pnts.size() > 3 ) // Note, slighlty different than PCurve
-            {
-                m_Curve.InterpolatePCHIP( ctrl_pnts, t_vec, false );
-            }
-            else
-            {
-                m_Curve.InterpolateLinear( ctrl_pnts, t_vec, false );
-            }
-            break;
-        case vsp::CEDIT:
-            m_Curve.SetCubicControlPoints( ctrl_pnts, t_vec );
-            break;
+        vector< vec3d > ctrl_pnts = GetCtrlPntVec( false, m_CloseFlag() );
+        m_Curve.InterpolateLinear( ctrl_pnts, t_vec, m_CloseFlag() );
+    }
+    else if ( m_CurveType() == vsp::PCHIP )
+    {
+        vector< vec3d > ctrl_pnts = GetCtrlPntVec( false, m_CloseFlag() );
+        if ( ctrl_pnts.size() > 3 ) // Note, slightly different than PCurve
+        {
+            m_Curve.InterpolatePCHIP( ctrl_pnts, t_vec, m_CloseFlag() );
+        }
+        else
+        {
+            m_Curve.InterpolateLinear( ctrl_pnts, t_vec, m_CloseFlag() );
+        }
+    }
+    else if ( m_CurveType() == vsp::CEDIT )
+    {
+        vector< vec3d > ctrl_pnts = GetCtrlPntVec( false );
+        m_Curve.SetCubicControlPoints( ctrl_pnts, t_vec );
     }
 
     m_Curve.OffsetX( 0.5 * m_Width() ); // Shift by 1/2 width (all XSec types are centered at (m_Width/2, 0, 0))
 
-    XSecCurve::Update(); // Note, this will add TE and LE Bezier Segments if Wing or BOR type
+    m_UnroundedCurve = m_Curve;
 
-    UpdateG1Parms();
+    RoundCorners();
+}
 
-    EnforcePtOrder();
+void EditCurveXSec::RoundCorners()
+{
+    vector < double > r_vec = GetRVec();
 
-    return;
+    if( m_CurveType() == vsp::LINEAR )
+    {
+        for ( int i = r_vec.size() - 2; i >= 0; i-- ) // Loop backwards to preserve indexing.
+        {
+            m_Curve.RoundJoint( r_vec[i], i );
+        }
+    }
+    else if( m_CurveType() == vsp::CEDIT )
+    {
+        int nseg = r_vec.size() / 3;
+        for ( int i = nseg - 1; i >= 0; i-- ) // Loop backwards to preserve indexing.
+        {
+            int j = 3 * i;
+            m_Curve.RoundJoint( r_vec[j], i );
+        }
+    }
+
+}
+
+void EditCurveXSec::SetScale( double scale )
+{
+    XSecCurve::SetScale( scale );
+
+    m_Depth.Set( m_Depth.Get() * scale );
+
+    for ( int i = 0; i < m_RParmVec.size(); i++ )
+    {
+        m_RParmVec[i]->Set( m_RParmVec[i]->Get() * scale );
+    }
 }
 
 void EditCurveXSec::EnforceClosure()
@@ -2809,15 +3547,21 @@ void EditCurveXSec::EnforceClosure()
     {
         m_XParmVec[m_XParmVec.size() - 1]->Set( m_XParmVec[0]->Get() );
         m_YParmVec[m_YParmVec.size() - 1]->Set( m_YParmVec[0]->Get() );
+        m_ZParmVec[m_ZParmVec.size() - 1]->Set( m_ZParmVec[0]->Get() );
+        m_RParmVec[m_RParmVec.size() - 1]->Set( m_RParmVec[0]->Get() );
 
         m_XParmVec[m_XParmVec.size() - 1]->Deactivate();
         m_YParmVec[m_YParmVec.size() - 1]->Deactivate();
+        m_ZParmVec[m_ZParmVec.size() - 1]->Deactivate();
+        m_RParmVec[m_RParmVec.size() - 1]->Deactivate();
         m_EnforceG1Vec[0]->Activate();
     }
     else
     {
         m_XParmVec[m_XParmVec.size() - 1]->Activate();
         m_YParmVec[m_YParmVec.size() - 1]->Activate();
+        m_ZParmVec[m_ZParmVec.size() - 1]->Activate();
+        m_RParmVec[m_RParmVec.size() - 1]->Activate();
         m_EnforceG1Vec[0]->Deactivate();
     }
 }
@@ -2826,7 +3570,7 @@ void EditCurveXSec::UpdateG1Parms()
 {
     if ( m_CurveType() == vsp::CEDIT )
     {
-        for ( size_t i = 1; i < m_EnforceG1Vec.size() - 1; i++ )
+        for ( size_t i = 0; i < m_EnforceG1Vec.size() - 1; i++ )
         {
             BoolParm* p = m_EnforceG1Vec[i];
             
@@ -2836,50 +3580,73 @@ void EditCurveXSec::UpdateG1Parms()
                 {
                     p->Set( false );
                     p->Deactivate();
+                    m_RParmVec[i]->Set( 0.0 );
+                    m_RParmVec[i]->Deactivate();
                 }
                 else if ( !( m_SymType() == SYM_RL && m_UParmVec[i]->Get() > 0.25 && m_UParmVec[i]->Get() < 0.75 ) )
                 {
                     p->Activate();
-
+                    m_RParmVec[i]->Activate();
                     if ( p->Get() )
                     {
                         if ( m_SymType() == SYM_RL && ( m_UParmVec[i]->Get() == 0.25 || m_UParmVec[i]->Get() == 0.75 ) )
                         {
-                            // Force horizontal tanget at axis of symmetry
+                            // Force horizontal tangent at axis of symmetry
                             m_YParmVec[i + 1]->Deactivate();
+                            m_ZParmVec[i + 1]->Deactivate();
                         }
                         else
                         {
                             // Set next control point as master over previous point
                             m_YParmVec[i + 1]->Activate();
+                            m_ZParmVec[i + 1]->Activate();
                         }
+                        m_RParmVec[i]->Set( 0.0 );
+                        m_RParmVec[i]->Deactivate();
                     }
                 }
                 else if ( m_SymType() == SYM_RL && m_UParmVec[i]->Get() > 0.25 && m_UParmVec[i]->Get() < 0.75 )
                 {
-                    p->Set( false );
                     p->Deactivate();
+                    m_RParmVec[i]->Deactivate();
                 }
             }
         }
     }
-    else
+    else if ( m_CurveType() == vsp::PCHIP )
     {
         for ( int j = 0; j < m_EnforceG1Vec.size() - 1; j++ )
         {
             m_EnforceG1Vec[j]->Set( false );
-            m_EnforceG1Vec[j]->Deactivate(); // No G1 enforcement for linear or PCHIP
+            m_EnforceG1Vec[j]->Deactivate(); // No G1 enforcement for PCHIP
+            m_RParmVec[j]->Set( 0.0 );
+            m_RParmVec[j]->Deactivate();
+        }
+    }
+    else if ( m_CurveType() == vsp::LINEAR )
+    {
+        for ( int j = 0; j < m_EnforceG1Vec.size() - 1; j++ )
+        {
+            m_EnforceG1Vec[j]->Set( false );
+            m_EnforceG1Vec[j]->Deactivate(); // No G1 enforcement for linear
+            m_RParmVec[j]->Activate();
         }
     }
 
+    // Disable first if not closed
     if ( !m_CloseFlag() )
     {
         m_EnforceG1Vec[0]->Deactivate();
         m_EnforceG1Vec[0]->Set( false );
+        m_RParmVec[0]->Set( 0.0 );
+        m_RParmVec[0]->Deactivate();
     }
 
+    // Always disable last.
     m_EnforceG1Vec[m_EnforceG1Vec.size() - 1]->Set( false );
     m_EnforceG1Vec[m_EnforceG1Vec.size() - 1]->Deactivate();
+    m_RParmVec[m_RParmVec.size() - 1]->Set( m_RParmVec[0]->Get() );
+    m_RParmVec[m_RParmVec.size() - 1]->Deactivate();
 }
 
 void EditCurveXSec::EnforcePtOrder( double rfirst, double rlast )
@@ -2996,7 +3763,6 @@ void EditCurveXSec::ClearPtOrder()
     for ( int j = 0; j < m_UParmVec.size(); j++ )
     {
         Parm* p = m_UParmVec[j];
-
         if ( p )
         {
             p->SetLowerLimit( 0.0 );
@@ -3005,7 +3771,6 @@ void EditCurveXSec::ClearPtOrder()
         }
 
         p = m_XParmVec[j];
-
         if ( p )
         {
             p->SetLowerLimit( -1.0e12 );
@@ -3014,7 +3779,6 @@ void EditCurveXSec::ClearPtOrder()
         }
 
         p = m_YParmVec[j];
-
         if ( p )
         {
             p->SetLowerLimit( -1.0e12 );
@@ -3022,8 +3786,23 @@ void EditCurveXSec::ClearPtOrder()
             p->Activate();
         }
 
-        BoolParm* bp = m_FixedUVec[j];
+        p = m_ZParmVec[j];
+        if ( p )
+        {
+            p->SetLowerLimit( -1.0e12 );
+            p->SetUpperLimit( 1.0e12 );
+            p->Activate();
+        }
 
+        p = m_RParmVec[j];
+        if ( p )
+        {
+            p->SetLowerLimit( 0.0 );
+            p->SetUpperLimit( 1.0e12 );
+            p->Activate();
+        }
+
+        BoolParm* bp = m_FixedUVec[j];
         if( bp )
         {
             bp->Activate();
@@ -3094,8 +3873,8 @@ void EditCurveXSec::EnforceSymmetry()
             }
         }
 
-        // Sort T vec and reorder X, Y, G1, and Fixed U simultaneously
-        // double[4] is {x, y, g1, fixed_u} to keep everything together when sorting
+        // Sort T vec and reorder X, Y, Z, R, G1, and Fixed U simultaneously
+        // double[6] is {x, y, z, r, g1, fixed_u} to keep everything together when sorting
         vector < pair < double, vector < double > > > sort_vec;
 
         // Force T of 1.0 and 3.0 on the Y axis
@@ -3108,7 +3887,9 @@ void EditCurveXSec::EnforceSymmetry()
                 {
                     if ( m_UParmVec[i]->Get() < top_u && m_UParmVec[i + 1]->Get() > top_u )
                     {
-                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[i]->Get() + m_YParmVec[i + 1]->Get() ) / 2.0, false, false };
+                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[i]->Get() + m_YParmVec[i + 1]->Get() ) / 2.0,
+                                                           ( m_ZParmVec[i]->Get() + m_ZParmVec[i + 1]->Get() ) / 2.0,
+                                                           ( m_RParmVec[i]->Get() + m_RParmVec[i + 1]->Get() ) / 2.0, false, false };
                         sort_vec.push_back( make_pair( top_u, pnt_vec ) );
                         break;
                     }
@@ -3121,7 +3902,9 @@ void EditCurveXSec::EnforceSymmetry()
                 {
                     if ( m_UParmVec[i]->Get() < bottom_u && m_UParmVec[i + 1]->Get() > bottom_u )
                     {
-                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[i]->Get() + m_YParmVec[i + 1]->Get() ) / 2.0, false, false };
+                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[i]->Get() + m_YParmVec[i + 1]->Get() ) / 2.0,
+                                                           ( m_ZParmVec[i]->Get() + m_ZParmVec[i + 1]->Get() ) / 2.0,
+                                                           ( m_RParmVec[i]->Get() + m_RParmVec[i + 1]->Get() ) / 2.0, false, false };
                         sort_vec.push_back( make_pair( bottom_u, pnt_vec ) );
                         break;
                     }
@@ -3151,11 +3934,15 @@ void EditCurveXSec::EnforceSymmetry()
                         m_UParmVec[(int)iend - 1]->Set( pend->Get() - dt / 3.0 );
 
                         // Add point on Y axis
-                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0, false, false };
+                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0,
+                                                           ( m_ZParmVec[istart]->Get() + m_ZParmVec[iend]->Get() ) / 2.0,
+                                                           ( m_RParmVec[istart]->Get() + m_RParmVec[iend]->Get() ) / 2.0, false, false };
                         sort_vec.push_back( make_pair( top_u, pnt_vec ) );
 
                         // Add intermediate control point
-                        pnt_vec = { 0.1 * m_Width(), ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0, false, false };
+                        pnt_vec = { 0.1 * m_Width(), ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0,
+                                                     ( m_ZParmVec[istart]->Get() + m_ZParmVec[iend]->Get() ) / 2.0,
+                                                     ( m_RParmVec[istart]->Get() + m_RParmVec[iend]->Get() ) / 2.0, false, false };
                         sort_vec.push_back( make_pair( top_u + dt / 3.0, pnt_vec ) );
                         
                         break;
@@ -3181,11 +3968,15 @@ void EditCurveXSec::EnforceSymmetry()
                         m_UParmVec[(int)istart + 1]->Set( pstart->Get() + dt / 3.0 );
 
                         // Add point on Y axis
-                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0, false, false };
+                        vector < double > pnt_vec = { 0.0, ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0,
+                                                           ( m_ZParmVec[istart]->Get() + m_ZParmVec[iend]->Get() ) / 2.0,
+                                                           ( m_RParmVec[istart]->Get() + m_RParmVec[iend]->Get() ) / 2.0, false, false };
                         sort_vec.push_back( make_pair( bottom_u, pnt_vec ) );
 
                         // Add intermediate control point
-                        pnt_vec = { 0.1 * m_Width(), ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0, false, false };
+                        pnt_vec = { 0.1 * m_Width(), ( m_YParmVec[istart]->Get() + m_YParmVec[iend]->Get() ) / 2.0,
+                                                     ( m_ZParmVec[istart]->Get() + m_ZParmVec[iend]->Get() ) / 2.0,
+                                                     ( m_RParmVec[istart]->Get() + m_RParmVec[iend]->Get() ) / 2.0, false, false };
                         sort_vec.push_back( make_pair( bottom_u - dt / 3.0, pnt_vec ) );
 
                         break;
@@ -3197,15 +3988,15 @@ void EditCurveXSec::EnforceSymmetry()
         if ( m_CurveType() == vsp::CEDIT )
         {
             // Include last two points
-            vector < double > pnt_vec = { m_XParmVec[m_UParmVec.size() - 1]->Get(), m_YParmVec[m_UParmVec.size() - 1]->Get(), (double)m_EnforceG1Vec[m_UParmVec.size() - 1]->Get(), (double)m_FixedUVec[m_UParmVec.size() - 1]->Get() };
+            vector < double > pnt_vec = { m_XParmVec[m_UParmVec.size() - 1]->Get(), m_YParmVec[m_UParmVec.size() - 1]->Get(), m_ZParmVec[m_UParmVec.size() - 1]->Get(), m_RParmVec[m_UParmVec.size() - 1]->Get(), (double)m_EnforceG1Vec[m_UParmVec.size() - 1]->Get(), (double)m_FixedUVec[m_UParmVec.size() - 1]->Get() };
             sort_vec.push_back( make_pair( m_UParmVec[m_UParmVec.size() - 1]->Get(), pnt_vec ) );
-            pnt_vec = { m_XParmVec[m_UParmVec.size() - 2]->Get(), m_YParmVec[m_UParmVec.size() - 2]->Get(), (double)m_EnforceG1Vec[m_UParmVec.size() - 2]->Get(), (double)m_FixedUVec[m_UParmVec.size() - 2]->Get() };
+            pnt_vec = { m_XParmVec[m_UParmVec.size() - 2]->Get(), m_YParmVec[m_UParmVec.size() - 2]->Get(), m_ZParmVec[m_UParmVec.size() - 2]->Get(), m_RParmVec[m_UParmVec.size() - 2]->Get(), (double)m_EnforceG1Vec[m_UParmVec.size() - 2]->Get(), (double)m_FixedUVec[m_UParmVec.size() - 2]->Get() };
             sort_vec.push_back( make_pair( m_UParmVec[m_UParmVec.size() - 2]->Get(), pnt_vec ) );
 
             // Include first two points
-            pnt_vec = { m_XParmVec[0]->Get(), m_YParmVec[0]->Get(), (double)m_EnforceG1Vec[0]->Get(), (double)m_FixedUVec[0]->Get() };
+            pnt_vec = { m_XParmVec[0]->Get(), m_YParmVec[0]->Get(), m_ZParmVec[0]->Get(), m_RParmVec[0]->Get(), (double)m_EnforceG1Vec[0]->Get(), (double)m_FixedUVec[0]->Get() };
             sort_vec.push_back( make_pair( m_UParmVec[0]->Get(), pnt_vec ) );
-            pnt_vec = { m_XParmVec[1]->Get(), m_YParmVec[1]->Get(), (double)m_EnforceG1Vec[1]->Get(), (double)m_FixedUVec[1]->Get() };
+            pnt_vec = { m_XParmVec[1]->Get(), m_YParmVec[1]->Get(), m_ZParmVec[1]->Get(), m_RParmVec[1]->Get(), (double)m_EnforceG1Vec[1]->Get(), (double)m_FixedUVec[1]->Get() };
             sort_vec.push_back( make_pair( m_UParmVec[1]->Get(), pnt_vec ) );
 
             int nseg = ( (int)m_UParmVec.size() - 1 ) / 3;
@@ -3219,28 +4010,28 @@ void EditCurveXSec::EnforceSymmetry()
                 if ( m_UParmVec[iseg]->Get() == bottom_u )
                 {
                     // Only keep right side (left will be reflected later)
-                    pnt_vec = { m_XParmVec[prev_ind]->Get(), m_YParmVec[prev_ind]->Get(), (double)m_EnforceG1Vec[prev_ind]->Get(), (double)m_FixedUVec[prev_ind]->Get() };
+                    pnt_vec = { m_XParmVec[prev_ind]->Get(), m_YParmVec[prev_ind]->Get(), m_ZParmVec[prev_ind]->Get(), m_RParmVec[prev_ind]->Get(), (double)m_EnforceG1Vec[prev_ind]->Get(), (double)m_FixedUVec[prev_ind]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[prev_ind]->Get(), pnt_vec ) );
-                    pnt_vec = { m_XParmVec[iseg]->Get(), m_YParmVec[iseg]->Get(), (double)m_EnforceG1Vec[iseg]->Get(), (double)m_FixedUVec[iseg]->Get() };
+                    pnt_vec = { m_XParmVec[iseg]->Get(), m_YParmVec[iseg]->Get(), m_ZParmVec[iseg]->Get(), m_RParmVec[iseg]->Get(), (double)m_EnforceG1Vec[iseg]->Get(), (double)m_FixedUVec[iseg]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[iseg]->Get(), pnt_vec ) );
                 }
                 else if ( m_UParmVec[iseg]->Get() == top_u )
                 {
                     // Only keep right side (left will be reflected later)
-                    pnt_vec = { m_XParmVec[iseg]->Get(), m_YParmVec[iseg]->Get(), (double)m_EnforceG1Vec[iseg]->Get(), (double)m_FixedUVec[iseg]->Get() };
+                    pnt_vec = { m_XParmVec[iseg]->Get(), m_YParmVec[iseg]->Get(), m_ZParmVec[iseg]->Get(), m_RParmVec[iseg]->Get(), (double)m_EnforceG1Vec[iseg]->Get(), (double)m_FixedUVec[iseg]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[iseg]->Get(), pnt_vec ) );
-                    pnt_vec = { m_XParmVec[next_ind]->Get(), m_YParmVec[next_ind]->Get(), (double)m_EnforceG1Vec[next_ind]->Get(), (double)m_FixedUVec[next_ind]->Get() };
+                    pnt_vec = { m_XParmVec[next_ind]->Get(), m_YParmVec[next_ind]->Get(), m_ZParmVec[next_ind]->Get(), m_RParmVec[next_ind]->Get(), (double)m_EnforceG1Vec[next_ind]->Get(), (double)m_FixedUVec[next_ind]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[next_ind]->Get(), pnt_vec ) );
                 }
                 else if ( ( m_UParmVec[iseg]->Get() <= bottom_u && m_UParmVec[prev_ind]->Get() <= bottom_u && m_UParmVec[next_ind]->Get() <= bottom_u ) ||
                     ( m_UParmVec[iseg]->Get() >= top_u && m_UParmVec[prev_ind]->Get() >= top_u && m_UParmVec[next_ind]->Get() >= top_u ) )
                 {
-                    // Only inlcude this control point if both neighbors are less than 0.25 or greater than 0.75
-                    pnt_vec = { m_XParmVec[prev_ind]->Get(), m_YParmVec[prev_ind]->Get(), (double)m_EnforceG1Vec[prev_ind]->Get(), (double)m_FixedUVec[prev_ind]->Get() };
+                    // Only include this control point if both neighbors are less than 0.25 or greater than 0.75
+                    pnt_vec = { m_XParmVec[prev_ind]->Get(), m_YParmVec[prev_ind]->Get(), m_ZParmVec[prev_ind]->Get(), m_RParmVec[prev_ind]->Get(), (double)m_EnforceG1Vec[prev_ind]->Get(), (double)m_FixedUVec[prev_ind]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[prev_ind]->Get(), pnt_vec ) );
-                    pnt_vec = { m_XParmVec[iseg]->Get(), m_YParmVec[iseg]->Get(), (double)m_EnforceG1Vec[iseg]->Get(), (double)m_FixedUVec[iseg]->Get() };
+                    pnt_vec = { m_XParmVec[iseg]->Get(), m_YParmVec[iseg]->Get(), m_ZParmVec[iseg]->Get(), m_RParmVec[iseg]->Get(), (double)m_EnforceG1Vec[iseg]->Get(), (double)m_FixedUVec[iseg]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[iseg]->Get(), pnt_vec ) );
-                    pnt_vec = { m_XParmVec[next_ind]->Get(), m_YParmVec[next_ind]->Get(), (double)m_EnforceG1Vec[next_ind]->Get(), (double)m_FixedUVec[next_ind]->Get() };
+                    pnt_vec = { m_XParmVec[next_ind]->Get(), m_YParmVec[next_ind]->Get(), m_ZParmVec[next_ind]->Get(), m_RParmVec[next_ind]->Get(), (double)m_EnforceG1Vec[next_ind]->Get(), (double)m_FixedUVec[next_ind]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[next_ind]->Get(), pnt_vec ) );
                 }
             }
@@ -3251,7 +4042,7 @@ void EditCurveXSec::EnforceSymmetry()
             {
                 if ( m_UParmVec[i]->Get() <= bottom_u || m_UParmVec[i]->Get() >= top_u )
                 {
-                    vector < double > pnt_vec = { m_XParmVec[i]->Get(), m_YParmVec[i]->Get(), (double)m_EnforceG1Vec[i]->Get(), (double)m_FixedUVec[i]->Get() };
+                    vector < double > pnt_vec = { m_XParmVec[i]->Get(), m_YParmVec[i]->Get(), m_ZParmVec[i]->Get(), m_RParmVec[i]->Get(), (double)m_EnforceG1Vec[i]->Get(), (double)m_FixedUVec[i]->Get() };
                     sort_vec.push_back( make_pair( m_UParmVec[i]->Get(), pnt_vec ) );
                 }
             }
@@ -3264,10 +4055,12 @@ void EditCurveXSec::EnforceSymmetry()
             double right_u = sort_vec[i].first;
             double right_x = sort_vec[i].second[0];
             double right_y = sort_vec[i].second[1];
-            bool right_g1 = (bool)sort_vec[i].second[2];
-            bool right_fix_u = (bool)sort_vec[i].second[3];
+            double right_z = sort_vec[i].second[2];
+            double right_r = sort_vec[i].second[3];
+            bool right_g1 = (bool)sort_vec[i].second[4];
+            bool right_fix_u = (bool)sort_vec[i].second[5];
 
-            vector < double > pnt_vec = { -right_x, right_y, (double)right_g1, (double)right_fix_u };
+            vector < double > pnt_vec = { -right_x, right_y, right_z, right_r, (double)right_g1, (double)right_fix_u };
 
             if ( right_u < bottom_u )
             {
@@ -3282,11 +4075,12 @@ void EditCurveXSec::EnforceSymmetry()
         // Concatenate left and right
         sort_vec.insert( sort_vec.end(), left_sort_vec.begin(), left_sort_vec.end() );
 
-        // Sort the vector by u value and reorder x, y, and g1 the same way
+        // Sort the vector by u value and reorder x, y, z, and g1 the same way
         sort( sort_vec.begin(), sort_vec.end(), CompareUFunc );
 
         vector < double > new_u_vec( sort_vec.size() );
         vector < vec3d > new_pnt_vec( sort_vec.size() );
+        vector < double > new_r_vec( sort_vec.size() );
         vector < bool > new_g1_vec( sort_vec.size() );
         vector < bool > new_fix_u_vec( sort_vec.size() ); // FIXME: copy fixed U flag
 
@@ -3295,13 +4089,15 @@ void EditCurveXSec::EnforceSymmetry()
             new_u_vec[i] = sort_vec[i].first;
             new_pnt_vec[i].set_x( sort_vec[i].second[0] );
             new_pnt_vec[i].set_y( sort_vec[i].second[1] );
-            new_g1_vec[i] = (bool)sort_vec[i].second[2];
-            new_fix_u_vec[i] = (bool)sort_vec[i].second[3];
+            new_pnt_vec[i].set_z( sort_vec[i].second[2] );
+            new_r_vec[i] = sort_vec[i].second[3];
+            new_g1_vec[i] = (bool)sort_vec[i].second[4];
+            new_fix_u_vec[i] = (bool)sort_vec[i].second[5];
         }
 
         if ( new_u_vec.size() != m_UParmVec.size() )
         {
-            SetPntVecs( new_u_vec, new_pnt_vec, new_g1_vec, new_fix_u_vec, false );
+            SetPntVecs( new_u_vec, new_pnt_vec, new_r_vec, new_g1_vec, new_fix_u_vec, false );
         }
         else
         {
@@ -3310,6 +4106,8 @@ void EditCurveXSec::EnforceSymmetry()
                 m_UParmVec[i]->Set( new_u_vec[i] );
                 m_XParmVec[i]->Set( new_pnt_vec[i].x() );
                 m_YParmVec[i]->Set( new_pnt_vec[i].y() );
+                m_ZParmVec[i]->Set( new_pnt_vec[i].z() );
+                m_RParmVec[i]->Set( new_r_vec[i] );
                 m_EnforceG1Vec[i]->Set( new_g1_vec[i] );
                 m_FixedUVec[i]->Set( new_fix_u_vec[i] );
             }
@@ -3323,6 +4121,8 @@ void EditCurveXSec::EnforceSymmetry()
                 m_UParmVec[i]->Deactivate();
                 m_XParmVec[i]->Deactivate();
                 m_YParmVec[i]->Deactivate();
+                m_ZParmVec[i]->Deactivate();
+                m_RParmVec[i]->Deactivate();
                 m_EnforceG1Vec[i]->Deactivate();
                 m_FixedUVec[i]->Deactivate();
             }
@@ -3364,15 +4164,18 @@ void EditCurveXSec::ConvertTo( int newtype )
                 case vsp::CEDIT:
                 {
                     vector < bool > prev_g1_vec = GetG1Vec();
-                    m_BaseEditCurve.ToCubic(); // Promote the curve
+                    vector < double > prev_r_vec = GetRVec();
+                    VspCurve crv = m_UnroundedCurve;
+                    crv.ToCubic(); // Promote the curve
 
                     vector < double > t_vec;
                     vector < vec3d> ctrl_pts;
 
-                    m_BaseEditCurve.GetCubicControlPoints( ctrl_pts, t_vec );
+                    crv.GetCubicControlPoints( ctrl_pts, t_vec );
 
                     vector < bool > new_g1_vec( ctrl_pts.size() );
                     vector < double > u_vec( t_vec.size() );
+                    vector < double > new_r_vec( t_vec.size() );
 
                     for ( size_t i = 0; i < ctrl_pts.size(); i++ )
                     {
@@ -3384,18 +4187,21 @@ void EditCurveXSec::ConvertTo( int newtype )
                         // Nondimensionalize by width and height
                         ctrl_pts[i].scale_x( 1.0 / m_Width() );
                         ctrl_pts[i].scale_y( 1.0 / m_Height() );
+                        ctrl_pts[i].scale_z( 1.0 / m_Depth() );
 
                         if ( i % 3 == 0 )
                         {
                             new_g1_vec[i] = prev_g1_vec[i / 3];
+                            new_r_vec[i] = prev_r_vec[i / 3];
                         }
                         else
                         {
                             new_g1_vec[i] = false;
+                            new_r_vec[i] = 0.0;
                         }
                     }
 
-                    SetPntVecs( u_vec, ctrl_pts, new_g1_vec );
+                    SetPntVecs( u_vec, ctrl_pts, new_r_vec, new_g1_vec );
                     break;
                 }
             }
@@ -3421,10 +4227,11 @@ void EditCurveXSec::ConvertTo( int newtype )
                     vector < double > t_vec;
                     vector < vec3d> ctrl_pts;
 
-                    m_BaseEditCurve.GetCubicControlPoints( ctrl_pts, t_vec );
+                    m_UnroundedCurve.GetCubicControlPoints( ctrl_pts, t_vec );
 
                     vector < double > u_vec( t_vec.size() );
                     vector < bool > new_g1_vec( ctrl_pts.size() );
+                    vector < double > new_r_vec( t_vec.size() );
 
                     for ( size_t i = 0; i < ctrl_pts.size(); i++ )
                     {
@@ -3436,6 +4243,9 @@ void EditCurveXSec::ConvertTo( int newtype )
                         // Nondimensionalize by width and height
                         ctrl_pts[i].scale_x( 1.0 / m_Width() );
                         ctrl_pts[i].scale_y( 1.0 / m_Height() );
+                        ctrl_pts[i].scale_z( 1.0 / m_Depth() );
+
+                        new_r_vec[i] = 0.0;
 
                         if ( i % 3 == 0 )
                         {
@@ -3447,7 +4257,7 @@ void EditCurveXSec::ConvertTo( int newtype )
                         }
                     }
 
-                    SetPntVecs( u_vec, ctrl_pts, new_g1_vec );
+                    SetPntVecs( u_vec, ctrl_pts, new_r_vec, new_g1_vec );
                     break;
                 }
             }
@@ -3458,14 +4268,15 @@ void EditCurveXSec::ConvertTo( int newtype )
             switch ( newtype )
             {
                 case vsp::LINEAR:
-                case vsp::PCHIP:
                 {
                     vector < double > u_vec = GetUVec();
                     vector < double > x_vec = GetXVec();
                     vector < double > y_vec = GetYVec();
+                    vector < double > z_vec = GetZVec();
+                    vector < double > r_vec = GetRVec();
                     vector < bool > g1_vec = GetG1Vec();
 
-                    vector < double > new_u_vec, new_x_vec, new_y_vec;
+                    vector < double > new_u_vec, new_x_vec, new_y_vec, new_z_vec, new_r_vec;
                     vector < bool > new_g1_vec;
 
                     int nseg = ( (int)x_vec.size() - 1 ) / 3;
@@ -3476,10 +4287,39 @@ void EditCurveXSec::ConvertTo( int newtype )
                         new_u_vec.push_back( u_vec[ipt] );
                         new_x_vec.push_back( x_vec[ipt] );
                         new_y_vec.push_back( y_vec[ipt] );
+                        new_z_vec.push_back( z_vec[ipt] );
+                        new_r_vec.push_back( r_vec[ipt] );
                         new_g1_vec.push_back( g1_vec[ipt] );
                     }
 
-                    SetPntVecs( new_u_vec, new_x_vec, new_y_vec, new_g1_vec );
+                    SetPntVecs( new_u_vec, new_x_vec, new_y_vec, new_z_vec, new_r_vec, new_g1_vec );
+                }
+                break;
+                case vsp::PCHIP:
+                {
+                    vector < double > u_vec = GetUVec();
+                    vector < double > x_vec = GetXVec();
+                    vector < double > y_vec = GetYVec();
+                    vector < double > z_vec = GetZVec();
+                    vector < bool > g1_vec = GetG1Vec();
+
+                    vector < double > new_u_vec, new_x_vec, new_y_vec, new_z_vec, new_r_vec;
+                    vector < bool > new_g1_vec;
+
+                    int nseg = ( (int)x_vec.size() - 1 ) / 3;
+
+                    for ( int i = 0; i < nseg + 1; i++ )
+                    {
+                        int ipt = 3 * i;
+                        new_u_vec.push_back( u_vec[ipt] );
+                        new_x_vec.push_back( x_vec[ipt] );
+                        new_y_vec.push_back( y_vec[ipt] );
+                        new_z_vec.push_back( z_vec[ipt] );
+                        new_r_vec.push_back( 0.0 );
+                        new_g1_vec.push_back( g1_vec[ipt] );
+                    }
+
+                    SetPntVecs( new_u_vec, new_x_vec, new_y_vec, new_z_vec, new_r_vec, new_g1_vec );
                 }
                 break;
                 case vsp::CEDIT:
@@ -3544,7 +4384,11 @@ void EditCurveXSec::ReparameterizeEqualArcLength()
 
         if ( m_SymType() == vsp::SYM_RL && ( m_UParmVec[iend]->Get() > 0.25 && m_UParmVec[iend]->Get() <= 0.75 ) )
         {
-            continue;
+            if ( m_UParmVec[iend]->Get() == 0.75 )
+            {
+                i_seg_prev = iend; // Set previous index after skipping left half of XSec
+            }
+            continue; // Skip left half of XSec when symmetry is on - EnforceSymmetry will mirror the right side
         }
         else if ( m_FixedUVec[iend]->Get() || ( m_SymType() == vsp::SYM_RL && m_UParmVec[iend]->Get() == 0.25 ) || ( iend == npt - 1 ) )
         {
@@ -3664,6 +4508,38 @@ vector < double > EditCurveXSec::GetYVec()
     return retvec;
 }
 
+vector < double > EditCurveXSec::GetZVec()
+{
+    vector < double > retvec( m_ZParmVec.size() );
+
+    for ( size_t i = 0; i < m_ZParmVec.size(); ++i )
+    {
+        Parm* p = m_ZParmVec[i];
+        if ( p )
+        {
+            retvec[i] = p->Get();
+        }
+    }
+
+    return retvec;
+}
+
+vector < double > EditCurveXSec::GetRVec()
+{
+    vector < double > retvec( m_RParmVec.size() );
+
+    for ( size_t i = 0; i < m_RParmVec.size(); ++i )
+    {
+        Parm* p = m_RParmVec[i];
+        if ( p )
+        {
+            retvec[i] = p->Get();
+        }
+    }
+
+    return retvec;
+}
+
 vector < bool > EditCurveXSec::GetG1Vec()
 {
     vector < bool > retvec( m_EnforceG1Vec.size() );
@@ -3727,7 +4603,7 @@ void EditCurveXSec::SetSelectPntID( int id )
 void EditCurveXSec::MovePnt( int index, vec3d new_pnt, bool force_update )
 {
     SetSelectPntID( index );
-    MovePnt( new_pnt.x(), new_pnt.y() );
+    MovePnt( new_pnt.x(), new_pnt.y(), new_pnt.z() );
 
     if ( force_update )
     {
@@ -3735,7 +4611,7 @@ void EditCurveXSec::MovePnt( int index, vec3d new_pnt, bool force_update )
     }
 }
 
-void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
+void EditCurveXSec::MovePnt( double x, double y, double z, bool neighbors_only )
 {
     if ( m_SelectPntID < 0 || m_SelectPntID >= m_XParmVec.size() )
     {
@@ -3744,8 +4620,9 @@ void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
 
     Parm *xp = m_XParmVec[m_SelectPntID];
     Parm *yp = m_YParmVec[m_SelectPntID];
+    Parm *zp = m_ZParmVec[m_SelectPntID];
 
-    if ( xp && yp )
+    if ( xp && yp && zp )
     {
 
         switch ( this->m_CurveType() )
@@ -3754,6 +4631,7 @@ void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
             case vsp::PCHIP:
                 xp->Set( x );
                 yp->Set( y );
+                zp->Set( z );
                 break;
             case vsp::CEDIT:
             {
@@ -3776,6 +4654,7 @@ void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
                             xprev = m_XParmVec[m_XParmVec.size() - 2];
                             xprev->Set( xprev->Get() + dx );
                         }
+
                         Parm* xnext = NULL;
                         if ( m_SelectPntID < m_XParmVec.size() - 1 )
                         {
@@ -3819,6 +4698,34 @@ void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
                         ynext = m_YParmVec[1];
                         ynext->Set( ynext->Get() + dy );
                     }
+
+                    // Adjust the Z coordinates of the neighboring control points
+                    double dz = z - zp->Get();
+
+                    Parm *zprev = NULL;
+                    if ( m_SelectPntID > 0 )
+                    {
+                        zprev = m_ZParmVec[m_SelectPntID - 1];
+                        zprev->Set( zprev->Get() + dz );
+                    }
+                    else if ( m_SelectPntID == 0 && m_CloseFlag() )
+                    {
+                        zprev = m_ZParmVec[m_ZParmVec.size() - 2];
+                        zprev->Set( zprev->Get() + dz );
+                    }
+                    Parm *znext = NULL;
+                    if ( m_SelectPntID < m_ZParmVec.size() - 1 )
+                    {
+                        znext = m_ZParmVec[m_SelectPntID + 1];
+                        znext->Set( znext->Get() + dz );
+                    }
+                    else if ( ( m_SelectPntID == m_ZParmVec.size() - 1 ) && m_CloseFlag() )
+                    {
+                        znext = m_ZParmVec[1];
+                        znext->Set( znext->Get() + dz );
+                    }
+
+
                 }
                 else if ( !neighbors_only )
                 {
@@ -3828,6 +4735,7 @@ void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
                 if ( !neighbors_only )
                 {
                     yp->Set( y );
+                    zp->Set( z );
                 }
 
                 break;
@@ -3838,39 +4746,68 @@ void EditCurveXSec::MovePnt( double x, double y, bool neighbors_only )
     Update();
 }
 
-vector < vec3d > EditCurveXSec::GetCtrlPntVec( bool non_dimensional )
+void EditCurveXSec::MovePnt( vec3d mpt, int iignore, bool neighbors_only )
 {
-    vector < vec3d > return_vec( m_XParmVec.size() );
-    for ( size_t i = 0; i < m_XParmVec.size(); i++ )
+    double z = 0;
+    if ( m_SelectPntID < 0 || m_SelectPntID >= m_XParmVec.size() )
+    {
+        return;
+    }
+
+    Parm *xp = m_XParmVec[m_SelectPntID];
+    Parm *yp = m_YParmVec[m_SelectPntID];
+    Parm *zp = m_ZParmVec[m_SelectPntID];
+
+    if ( xp && yp && zp )
+    {
+        vec3d prev_pt( xp->Get(), yp->Get(), zp->Get() );
+        mpt.v[iignore] = prev_pt.v[iignore];
+    }
+
+    MovePnt( mpt.x(), mpt.y(), mpt.z(), neighbors_only );
+}
+
+vector < vec3d > EditCurveXSec::GetCtrlPntVec( bool non_dimensional, bool skip_last )
+{
+    int n = m_XParmVec.size();
+    if ( skip_last && n > 0 )
+    {
+        n = n - 1;
+    }
+    vector < vec3d > return_vec( n );
+
+    for ( size_t i = 0; i < n; i++ )
     {
         if ( non_dimensional )
         {
-            return_vec[i] = vec3d( m_XParmVec[i]->Get(), m_YParmVec[i]->Get(), 0.0 );
+            return_vec[i] = vec3d( m_XParmVec[i]->Get(), m_YParmVec[i]->Get(), m_ZParmVec[i]->Get() );
         }
         else // Scale by width and height
         {
-            return_vec[i] = vec3d( m_Width() * m_XParmVec[i]->Get(), m_Height() * m_YParmVec[i]->Get(), 0.0 );
+            return_vec[i] = vec3d( m_Width() * m_XParmVec[i]->Get(), m_Height() * m_YParmVec[i]->Get(), m_Depth() * m_ZParmVec[i]->Get() );
         }
     }
 
     return return_vec;
 }
 
-void EditCurveXSec::SetPntVecs( vector < double > u_vec, vector < vec3d > pnt_vec, vector < bool > g1_vec, vector < bool > fix_u_vec, bool force_update )
+void EditCurveXSec::SetPntVecs( vector < double > u_vec, vector < vec3d > pnt_vec, vector < double > r_vec, vector < bool > g1_vec, vector < bool > fix_u_vec, bool force_update )
 {
     vector < double > x_vec( pnt_vec.size() );
     vector < double > y_vec( pnt_vec.size() );
+    vector < double > z_vec( pnt_vec.size() );
 
     for ( size_t i = 0; i < pnt_vec.size(); i++ )
     {
         x_vec[i] = pnt_vec[i].x();
         y_vec[i] = pnt_vec[i].y();
+        z_vec[i] = pnt_vec[i].z();
     }
 
-    SetPntVecs( u_vec, x_vec, y_vec, g1_vec, fix_u_vec, force_update );
+    SetPntVecs( u_vec, x_vec, y_vec, z_vec, r_vec, g1_vec, fix_u_vec, force_update );
 }
 
-void EditCurveXSec::SetPntVecs( vector < double > u_vec, vector < double > x_pnt_vec, vector < double > y_pnt_vec, vector < bool > g1_vec, vector < bool > fix_u_vec, bool force_update )
+void EditCurveXSec::SetPntVecs( vector < double > u_vec, vector < double > x_pnt_vec, vector < double > y_pnt_vec, vector < double > z_pnt_vec, vector < double > r_vec, vector < bool > g1_vec, vector < bool > fix_u_vec, bool force_update )
 {
     // TODO: Limit the number of times this function is called, since it will cause parm IDs to be reset, 
     // causing links design variables, etc. to become broken.
@@ -3898,6 +4835,8 @@ void EditCurveXSec::SetPntVecs( vector < double > u_vec, vector < double > x_pnt
         delete m_UParmVec[i];
         delete m_XParmVec[i];
         delete m_YParmVec[i];
+        delete m_ZParmVec[i];
+        delete m_RParmVec[i];
         delete m_EnforceG1Vec[i];
         delete m_FixedUVec[i];
     }
@@ -3905,13 +4844,15 @@ void EditCurveXSec::SetPntVecs( vector < double > u_vec, vector < double > x_pnt
     m_UParmVec.clear();
     m_XParmVec.clear();
     m_YParmVec.clear();
+    m_ZParmVec.clear();
+    m_RParmVec.clear();
     m_EnforceG1Vec.clear();
     m_FixedUVec.clear();
 
     //==== Load Control Points ====//
     for ( size_t i = 0; i < u_vec.size(); i++ )
     {
-        AddPt( u_vec[i], x_pnt_vec[i], y_pnt_vec[i], g1_vec[i], fix_u_vec[i] );
+        AddPt( u_vec[i], x_pnt_vec[i], y_pnt_vec[i], z_pnt_vec[i], r_vec[i], g1_vec[i], fix_u_vec[i] );
     }
 
     RenameParms();
@@ -3943,19 +4884,27 @@ void EditCurveXSec::DeletePt( int indx )
             delete m_UParmVec[indx - 1];
             delete m_UParmVec[indx];
             delete m_UParmVec[indx + 1];
-
             m_UParmVec.erase( m_UParmVec.begin() + indx - 1, m_UParmVec.begin() + indx + 2 );
 
             delete m_XParmVec[indx - 1];
             delete m_XParmVec[indx];
             delete m_XParmVec[indx + 1];
-
             m_XParmVec.erase( m_XParmVec.begin() + indx - 1, m_XParmVec.begin() + indx + 2 );
 
             delete m_YParmVec[indx - 1];
             delete m_YParmVec[indx];
             delete m_YParmVec[indx + 1];
             m_YParmVec.erase( m_YParmVec.begin() + indx - 1, m_YParmVec.begin() + indx + 2 );
+
+            delete m_ZParmVec[indx - 1];
+            delete m_ZParmVec[indx];
+            delete m_ZParmVec[indx + 1];
+            m_ZParmVec.erase( m_ZParmVec.begin() + indx - 1, m_ZParmVec.begin() + indx + 2 );
+
+            delete m_RParmVec[indx - 1];
+            delete m_RParmVec[indx];
+            delete m_RParmVec[indx + 1];
+            m_RParmVec.erase( m_RParmVec.begin() + indx - 1, m_RParmVec.begin() + indx + 2 );
 
             delete m_EnforceG1Vec[indx - 1];
             delete m_EnforceG1Vec[indx];
@@ -3977,6 +4926,12 @@ void EditCurveXSec::DeletePt( int indx )
 
             delete m_YParmVec[indx];
             m_YParmVec.erase( m_YParmVec.begin() + indx );
+
+            delete m_ZParmVec[indx];
+            m_ZParmVec.erase( m_ZParmVec.begin() + indx );
+
+            delete m_RParmVec[indx];
+            m_RParmVec.erase( m_RParmVec.begin() + indx );
 
             delete m_EnforceG1Vec[indx];
             m_EnforceG1Vec.erase( m_EnforceG1Vec.begin() + indx );
@@ -4005,6 +4960,12 @@ void EditCurveXSec::RenameParms()
 
         sprintf( str, "Y_%d", i );
         m_YParmVec[i]->SetName( string( str ) );
+
+        sprintf( str, "Z_%d", i );
+        m_ZParmVec[i]->SetName( string( str ) );
+
+        sprintf( str, "R_%d", i );
+        m_RParmVec[i]->SetName( string( str ) );
 
         sprintf( str, "U_%d", i );
         m_UParmVec[i]->SetName( string( str ) );
@@ -4086,7 +5047,7 @@ int EditCurveXSec::Split01( double u_split )
         case vsp::LINEAR:
         case vsp::PCHIP:
         {
-            vec3d split_pnt = m_BaseEditCurve.CompPnt( 4.0 * u_split );
+            vec3d split_pnt = m_UnroundedCurve.CompPnt( 4.0 * u_split );
 
             // Shift back to be centered at origin
             split_pnt.offset_x( -0.5 * m_Width() );
@@ -4098,14 +5059,18 @@ int EditCurveXSec::Split01( double u_split )
             u_vec = GetUVec();
             vector < double > x_vec = GetXVec();
             vector < double > y_vec = GetYVec();
+            vector < double > z_vec = GetZVec();
+            vector < double > r_vec = GetRVec();
             vector < bool > g1_vec = GetG1Vec();
             vector < bool > fix_u_vec = GetFixedUVec();
 
-            vector < double > new_u_vec, new_x_vec, new_y_vec;
+            vector < double > new_u_vec, new_x_vec, new_y_vec, new_z_vec, new_r_vec;
             vector < bool > new_g1_vec, new_fix_u_vec;
             new_u_vec.reserve( u_vec.size() + 1 );
             new_x_vec.reserve( x_vec.size() + 1 );
             new_y_vec.reserve( y_vec.size() + 1 );
+            new_z_vec.reserve( z_vec.size() + 1 );
+            new_r_vec.reserve( r_vec.size() + 1 );
             new_g1_vec.reserve( g1_vec.size() + 1 );
             new_fix_u_vec.reserve( fix_u_vec.size() + 1 );
 
@@ -4114,6 +5079,8 @@ int EditCurveXSec::Split01( double u_split )
                 new_u_vec.push_back( u_split );
                 new_x_vec.push_back( split_pnt.x() );
                 new_y_vec.push_back( split_pnt.y() );
+                new_z_vec.push_back( split_pnt.z() );
+                new_r_vec.push_back( 0.0 );
                 new_g1_vec.push_back( false );
                 new_fix_u_vec.push_back( false );
             }
@@ -4121,6 +5088,8 @@ int EditCurveXSec::Split01( double u_split )
             new_u_vec.push_back( u_vec[0] );
             new_x_vec.push_back( x_vec[0] );
             new_y_vec.push_back( y_vec[0] );
+            new_z_vec.push_back( z_vec[0] );
+            new_r_vec.push_back( r_vec[0] );
             new_g1_vec.push_back( g1_vec[0] );
             new_fix_u_vec.push_back( fix_u_vec[0] );
 
@@ -4131,12 +5100,16 @@ int EditCurveXSec::Split01( double u_split )
                     new_u_vec.push_back( u_split );
                     new_x_vec.push_back( split_pnt.x() );
                     new_y_vec.push_back( split_pnt.y() );
+                    new_z_vec.push_back( split_pnt.z() );
+                    new_r_vec.push_back( 0.0 );
                     new_g1_vec.push_back( false );
                     new_fix_u_vec.push_back( false );
                 }
                 new_u_vec.push_back( u_vec[i] );
                 new_x_vec.push_back( x_vec[i] );
                 new_y_vec.push_back( y_vec[i] );
+                new_z_vec.push_back( z_vec[i] );
+                new_r_vec.push_back( r_vec[i] );
                 new_g1_vec.push_back( g1_vec[i] );
                 new_fix_u_vec.push_back( fix_u_vec[i] );
             }
@@ -4145,28 +5118,33 @@ int EditCurveXSec::Split01( double u_split )
             {
                 new_u_vec.push_back( u_split );
                 new_x_vec.push_back( split_pnt.x() );
-                new_x_vec.push_back( split_pnt.y() );
+                new_y_vec.push_back( split_pnt.y() );
+                new_z_vec.push_back( split_pnt.z() );
+                new_r_vec.push_back( 0.0 );
                 new_g1_vec.push_back( false );
                 new_fix_u_vec.push_back( false );
             }
 
-            SetPntVecs( new_u_vec, new_x_vec, new_y_vec, new_g1_vec, new_fix_u_vec );
+            SetPntVecs( new_u_vec, new_x_vec, new_y_vec, new_z_vec, new_r_vec, new_g1_vec, new_fix_u_vec ); // Need to pass new_r_vec
         }
         break;
         case vsp::CEDIT:
         {
+            VspCurve crv = m_UnroundedCurve;
             vector < bool > prev_g1_vec = GetG1Vec();
+            vector < double > prev_r_vec = GetRVec();
             vector < bool > prev_fix_u_vec = GetFixedUVec();
-            m_BaseEditCurve.Split( 4.0 * u_split );
+            crv.Split( 4.0 * u_split );
 
             u_vec.clear();
             vector < double > t_vec;
             vector < vec3d > ctrl_pnts;
 
-            m_BaseEditCurve.GetCubicControlPoints( ctrl_pnts, t_vec );
+            crv.GetCubicControlPoints( ctrl_pnts, t_vec );
 
             u_vec.resize( t_vec.size() );
             vector < bool > new_g1_vec( ctrl_pnts.size() );
+            vector < double > new_r_vec( ctrl_pnts.size() );
             vector < bool > new_fix_u_vec( ctrl_pnts.size() );
 
             for ( size_t i = 0; i < ctrl_pnts.size(); i++ )
@@ -4179,25 +5157,29 @@ int EditCurveXSec::Split01( double u_split )
                 // Nondimensionalize by width and height
                 ctrl_pnts[i].scale_x( 1.0 / m_Width() );
                 ctrl_pnts[i].scale_y( 1.0 / m_Height() );
+                ctrl_pnts[i].scale_z( 1.0 / m_Depth() );
 
                 if ( ( i >= m_SelectPntID - 1 ) && ( i <= m_SelectPntID + 1 ) )
                 {
                     new_g1_vec[i] = false;
+                    new_r_vec[i] = 0.0;
                     new_fix_u_vec[i] = false;
                 }
                 else if ( i < m_SelectPntID - 1 )
                 {
                     new_g1_vec[i] = prev_g1_vec[i];
+                    new_r_vec[i] = prev_r_vec[i];
                     new_fix_u_vec[i] = prev_fix_u_vec[i];
                 }
                 else
                 {
                     new_g1_vec[i] = prev_g1_vec[i - 3];
+                    new_r_vec[i] = prev_r_vec[i - 3];
                     new_fix_u_vec[i] = prev_fix_u_vec[i - 3];
                 }
             }
 
-            SetPntVecs( u_vec, ctrl_pnts, new_g1_vec, new_fix_u_vec );
+            SetPntVecs( u_vec, ctrl_pnts, new_r_vec, new_g1_vec, new_fix_u_vec );
         }
         break;
     }
@@ -4226,9 +5208,9 @@ void EditCurveXSec::EnforceG1( int new_index )
                 prev_ind = (int)m_EnforceG1Vec.size() - 2;
             }
 
-            vec3d prev_pnt = vec3d( m_XParmVec[prev_ind]->Get(), m_YParmVec[prev_ind]->Get(), 0.0 );
-            vec3d curr_pnt = vec3d( m_XParmVec[i]->Get(), m_YParmVec[i]->Get(), 0.0 );
-            vec3d next_pnt = vec3d( m_XParmVec[next_ind]->Get(), m_YParmVec[next_ind]->Get(), 0.0 );
+            vec3d prev_pnt = vec3d( m_XParmVec[prev_ind]->Get(), m_YParmVec[prev_ind]->Get(), m_ZParmVec[prev_ind]->Get() );
+            vec3d curr_pnt = vec3d( m_XParmVec[i]->Get(), m_YParmVec[i]->Get(), m_ZParmVec[i]->Get() );
+            vec3d next_pnt = vec3d( m_XParmVec[next_ind]->Get(), m_YParmVec[next_ind]->Get(), m_ZParmVec[next_ind]->Get() );
 
             // Identify distances from point on the curve
             double prev_dist = dist( prev_pnt, curr_pnt );
@@ -4270,18 +5252,22 @@ void EditCurveXSec::EnforceG1( int new_index )
 
                 m_XParmVec[prev_ind]->Set( new_prev_pnt.x() );
                 m_YParmVec[prev_ind]->Set( new_prev_pnt.y() );
+                m_ZParmVec[prev_ind]->Set( new_prev_pnt.z() );
 
                 prev_to_center_vec.rotate_z( cos( prev_rot ), sin( prev_rot ) );
                 vec3d new_next_pnt = curr_pnt + next_dist * prev_to_center_vec;
 
                 m_XParmVec[next_ind]->Set( new_next_pnt.x() );
                 m_YParmVec[next_ind]->Set( new_next_pnt.y() );
+                m_ZParmVec[next_ind]->Set( new_next_pnt.z() );
             }
             else if ( m_SymType() == SYM_RL && ( m_UParmVec[i]->Get() == 0.25 || m_UParmVec[i]->Get() == 0.75 ) )
             {
-                // Force horizontal tanget at axis of symmetry
+                // Force horizontal tangent at axis of symmetry
                 m_YParmVec[prev_ind]->Set( m_YParmVec[i]->Get() );
                 m_YParmVec[next_ind]->Set( m_YParmVec[i]->Get() );
+                m_ZParmVec[prev_ind]->Set( m_ZParmVec[i]->Get() );
+                m_ZParmVec[next_ind]->Set( m_ZParmVec[i]->Get() );
             }
             else if ( ( std::abs( prev_theta - next_theta ) > FLT_EPSILON ) )
             {
@@ -4292,6 +5278,7 @@ void EditCurveXSec::EnforceG1( int new_index )
 
                     m_XParmVec[prev_ind]->Set( new_prev_pnt.x() );
                     m_YParmVec[prev_ind]->Set( new_prev_pnt.y() );
+                    m_ZParmVec[prev_ind]->Set( new_prev_pnt.z() );
                 }
                 else
                 {
@@ -4299,6 +5286,7 @@ void EditCurveXSec::EnforceG1( int new_index )
 
                     m_XParmVec[next_ind]->Set( new_next_pnt.x() );
                     m_YParmVec[next_ind]->Set( new_next_pnt.y() );
+                    m_ZParmVec[next_ind]->Set( new_next_pnt.z() );
                 }
             }
         }
@@ -4321,11 +5309,10 @@ InterpXSec::InterpXSec( ) : XSecCurve( )
 }
 
 //==== Update Geometry ====//
-void InterpXSec::Update()
+void InterpXSec::UpdateCurve( bool updateParms )
 {
     m_Curve.MatchThick( m_Height() / m_Width() );
     m_Curve.Scale( m_Width() );
-    XSecCurve::Update();
 }
 
 //==== Set Width and Height ====//
@@ -4361,9 +5348,246 @@ void InterpXSec::Interp( XSecCurve *start, XSecCurve *end, double frac )
         crv_vec[1].Scale( 1.0 / wc );
     }
 
+    crv_vec[0].ToBinaryCubic( true, 1e-6 );
+    crv_vec[1].ToBinaryCubic( true, 1e-6 );
+
     VspSurf srf;
     srf.SkinC0( crv_vec, false );
 
     srf.GetUConstCurve( m_Curve, frac );
 
+}
+
+//==========================================================================//
+//==========================================================================//
+//==========================================================================//
+
+XSecCurveDriverGroup::XSecCurveDriverGroup( int Nvar, int Nchoice ) : DriverGroup( Nvar, Nchoice )
+{
+    m_Parent = NULL;
+
+    m_prevArea = -1.0;
+    m_Name = "XSecCurveDriverGroup";
+}
+
+HWXSecCurveDriverGroup::HWXSecCurveDriverGroup() : XSecCurveDriverGroup( NUM_XSEC_DRIVER, 2 )
+{
+    m_CurrChoices[0] = WIDTH_XSEC_DRIVER;
+    m_CurrChoices[1] = HEIGHT_XSEC_DRIVER;
+}
+
+void HWXSecCurveDriverGroup::UpdateGroup( vector< string > parmIDs )
+{
+    vector< bool > uptodate( m_Nvar, false );
+
+    for( int i = 0; i < m_Nchoice; i++ )
+    {
+        uptodate[m_CurrChoices[i]] = true;
+    }
+
+    if( uptodate[WIDTH_XSEC_DRIVER] && uptodate[HEIGHT_XSEC_DRIVER] )
+    {
+        // fast path
+    }
+    else
+    {
+        Parm* width = ParmMgr.FindParm( parmIDs[WIDTH_XSEC_DRIVER] );
+        Parm* height = ParmMgr.FindParm( parmIDs[HEIGHT_XSEC_DRIVER] );
+        Parm* area = ParmMgr.FindParm( parmIDs[AREA_XSEC_DRIVER] );
+        Parm* hwratio = ParmMgr.FindParm( parmIDs[HWRATIO_XSEC_DRIVER] );
+
+        // Area is a driver, first time through, calculate m_prevArea
+        if ( uptodate[AREA_XSEC_DRIVER] && m_prevArea < 0 )
+        {
+            m_Parent->UpdateCurve( false );
+            m_prevArea = m_Parent->AreaNoUpdate();
+        }
+
+        if ( uptodate[AREA_XSEC_DRIVER] ) // Area is a driver, may need iteration.
+        {
+            int iter = 0;
+            double tol = 1e-6 * area->Get();
+            if ( tol < 1e-12 ) tol = 1e-12;
+            double err = 100 * tol;
+
+            bool canconverge = true;
+
+            while ( err > tol && iter < 10 && canconverge )
+            {
+                if( uptodate[HWRATIO_XSEC_DRIVER] )
+                {
+                    if ( m_prevArea == 0 )
+                    {
+                        width->Set( 1.0 );
+                        height->Set( 1.0 );
+                    }
+                    else
+                    {
+                        double scale = sqrt( area->Get() / m_prevArea );
+                        if ( hwratio->Get() == 0 )
+                        {
+                            scale = 1.0;
+                            canconverge = false;
+                        }
+
+                        width->Set( scale * width->Get() );
+                        height->Set( width->Get() * hwratio->Get() );
+                    }
+                }
+                else if( uptodate[WIDTH_XSEC_DRIVER] )
+                {
+                    if ( m_prevArea == 0 )
+                    {
+                        height->Set( 1.0 );
+                    }
+                    else
+                    {
+                        double scale = area->Get() / m_prevArea;
+
+                        if ( width->Get() == 0 )
+                        {
+                            scale = 1.0;
+                            canconverge = false;
+                        }
+                        height->Set( scale * height->Get() );
+                    }
+                }
+                else if( uptodate[HEIGHT_XSEC_DRIVER] )
+                {
+                    if ( m_prevArea == 0 )
+                    {
+                        width->Set( 1.0 );
+                    }
+                    else
+                    {
+                        double scale = area->Get() / m_prevArea;
+                        if ( height->Get() == 0 )
+                        {
+                            scale = 1.0;
+                            canconverge = false;
+                        }
+                        width->Set( scale * width->Get() );
+                    }
+                }
+
+                // Minimal curve math update.
+                m_Parent->UpdateCurve( false );
+                double newarea = m_Parent->AreaNoUpdate();
+
+                err = std::abs( newarea - area->Get() );
+
+                m_prevArea = newarea;
+                iter++;
+            }
+
+            uptodate[WIDTH_XSEC_DRIVER] = true;
+            uptodate[HEIGHT_XSEC_DRIVER] = true;
+        }
+        else  // Area is not a driver, cases should be algebraic.
+        {
+            if( !uptodate[WIDTH_XSEC_DRIVER] )
+            {
+                if( uptodate[HEIGHT_XSEC_DRIVER] && uptodate[HWRATIO_XSEC_DRIVER] )
+                {
+                    width->Set( height->Get() / hwratio->Get() );
+                    uptodate[WIDTH_XSEC_DRIVER] = true;
+                }
+            }
+
+            if( !uptodate[HEIGHT_XSEC_DRIVER] )
+            {
+                if( uptodate[WIDTH_XSEC_DRIVER] && uptodate[HWRATIO_XSEC_DRIVER] )
+                {
+                    height->Set( width->Get() * hwratio->Get() );
+                    uptodate[HEIGHT_XSEC_DRIVER] = true;
+                }
+            }
+        }
+    }
+}
+
+bool HWXSecCurveDriverGroup::ValidDrivers( vector< int > choices )
+{
+    // Check for duplicate selections.
+    for( int i = 0; i < (int)choices.size() - 1; i++ )
+    {
+        for( int j = i + 1; j < (int)choices.size(); j++ )
+        {
+            if( choices[i] == choices[j] )
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+DXSecCurveDriverGroup::DXSecCurveDriverGroup() : XSecCurveDriverGroup( CIRCLE_NUM_XSEC_DRIVER, 1 )
+{
+    m_CurrChoices[0] = WIDTH_XSEC_DRIVER;
+}
+
+void DXSecCurveDriverGroup::UpdateGroup( vector< string > parmIDs )
+{
+    vector< bool > uptodate( m_Nvar, false );
+
+    for( int i = 0; i < m_Nchoice; i++ )
+    {
+        uptodate[m_CurrChoices[i]] = true;
+    }
+
+    if( uptodate[WIDTH_XSEC_DRIVER] )
+    {
+        // fast path
+    }
+    else
+    {
+        Parm* width = ParmMgr.FindParm( parmIDs[WIDTH_XSEC_DRIVER] );
+        Parm* area = ParmMgr.FindParm( parmIDs[AREA_XSEC_DRIVER] );
+
+        // Area is a driver, first time through, calculate m_prevArea
+        if ( uptodate[AREA_XSEC_DRIVER] && m_prevArea < 0 )
+        {
+            m_Parent->UpdateCurve( false );
+            m_prevArea = m_Parent->AreaNoUpdate();
+        }
+
+        if ( uptodate[AREA_XSEC_DRIVER] ) // Area is a driver, may need iteration.
+        {
+            int iter = 0;
+            double tol = 1e-6 * area->Get();
+            if ( tol < 1e-12 ) tol = 1e-12;
+            double err = 100 * tol;
+
+            while ( err > tol && iter < 10 )
+            {
+                if ( m_prevArea == 0 )
+                {
+                    width->Set( 1.0 );
+                }
+                else
+                {
+                    double scale = sqrt( area->Get() / m_prevArea );
+                    width->Set( scale * width->Get() );
+                }
+
+                // Minimal curve math update.
+                m_Parent->UpdateCurve( false );
+                double newarea = m_Parent->AreaNoUpdate();
+
+                err = std::abs( newarea - area->Get() );
+
+                m_prevArea = newarea;
+                iter++;
+            }
+
+            uptodate[WIDTH_XSEC_DRIVER] = true;
+        }
+    }
+}
+
+bool DXSecCurveDriverGroup::ValidDrivers( vector< int > choices )
+{
+    return ( choices[0] == WIDTH_XSEC_DRIVER || choices[0] == AREA_XSEC_DRIVER );
 }

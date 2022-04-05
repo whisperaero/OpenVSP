@@ -14,6 +14,7 @@
 
 #include "VspCurve.h"
 #include "APIDefines.h"
+#include "StlHelper.h"
 
 #include "eli/geom/curve/length.hpp"
 #include "eli/geom/curve/piecewise_creator.hpp"
@@ -31,7 +32,7 @@ typedef piecewise_curve_type::tolerance_type curve_tolerance_type;
 typedef eli::geom::curve::piecewise_cubic_spline_creator<double, 3, curve_tolerance_type> piecewise_cubic_spline_creator_type;
 typedef eli::geom::curve::piecewise_linear_creator<double, 3, curve_tolerance_type> piecewise_linear_creator_type;
 typedef eli::geom::curve::piecewise_binary_cubic_creator<double, 3, curve_tolerance_type> piecewise_binary_cubic_creator;
-
+typedef eli::geom::curve::piecewise_binary_cubic_cylinder_projector<double, 3, curve_tolerance_type> piecewise_binary_cubic_cylinder_projector;
 //=============================================================================//
 //============================= VspCurve      =================================//
 //=============================================================================//
@@ -244,14 +245,53 @@ void octave_print( int figno, const piecewise_curve_type &pc )
 }
 #endif
 
-void VspCurve::RoundJoint( double rad, int i )
+bool VspCurve::RoundJoint( double rad, int i )
 {
-    m_Curve.round( rad, i );
+    return m_Curve.round( rad, i );
 }
 
-void VspCurve::RoundAllJoints( double rad )
+bool VspCurve::RoundJoint( double rad, double u )
 {
-    m_Curve.round( rad );
+    vector < double > umap;
+    m_Curve.get_pmap( umap );
+
+    int irnd = vector_find_val( umap, u );
+    if ( irnd > 0 )
+    {
+        return RoundJoint( rad, irnd );
+    }
+    return false;
+}
+
+bool VspCurve::RoundJoints( double rad, vector < double > uvec )
+{
+    vector < double > umap;
+
+    bool retval = true; // Assume all success
+    bool ret;
+
+    for ( int i = 0; i < uvec.size(); i++ )
+    {
+        // Allowing shifting of the curve start means some rounding can wrap-around the start/end point, thereby making
+        // it impossible to guarantee that the first parts of umap go unchanged.  Further complexity is not worthwhile,
+        // it is best to get get_pmap every time.
+        m_Curve.get_pmap( umap );
+        int irnd = vector_find_val( umap, uvec[i], 1e-8 );
+        if ( irnd >= 0 )
+        {
+            ret = RoundJoint( rad, irnd );
+        }
+        else
+        {
+            ret = false;
+        }
+
+        if ( !ret ) // Detect any failure.
+        {
+            retval = false;
+        }
+    }
+    return retval;
 }
 
 void VspCurve::Modify( int type, bool le, double len, double off, double str )
@@ -668,6 +708,42 @@ void VspCurve::GetCubicControlPoints( vector< vec3d >& cntrl_pts, vector< double
 
             cntrl_pts.push_back( p );
             param.push_back( tend );
+        }
+    }
+}
+
+void VspCurve::GetLinearControlPoints( vector< vec3d >& cntrl_pts, vector< double >& param )
+{
+    int nseg = m_Curve.number_segments();
+
+    int ncp = nseg + 1;
+
+    cntrl_pts.clear();
+    param.clear();
+
+    cntrl_pts.reserve( ncp );
+    param.reserve( ncp );
+
+    m_Curve.get_pmap( param );
+
+    for ( size_t i = 0; i < nseg; i++ )
+    {
+        curve_segment_type c;
+
+        m_Curve.get( c, i );
+
+        curve_point_type p;
+        p = c.get_control_point( 0 );
+
+        cntrl_pts.push_back( p );
+
+
+        if ( i == nseg - 1 )
+        {
+            curve_point_type p;
+            p = c.get_control_point( 1 );
+
+            cntrl_pts.push_back( p );
         }
     }
 }
@@ -1195,6 +1271,11 @@ double VspCurve::CompLength( double tol ) const
     return len;
 }
 
+double VspCurve::CompArea( int idir, int jdir ) const
+{
+    return m_Curve.area( idir, jdir );
+}
+
 //===== Tesselate =====//
 void VspCurve::TesselateNoCorner( int num_pnts_u, double umin, double umax, vector< vec3d > & output, vector< double > &uout )
 {
@@ -1297,6 +1378,70 @@ void VspCurve::OffsetZ( double z )
     Offset( offvec );
 }
 
+void VspCurve::ProjectOntoCylinder( double r, bool wingtype, double ttol, double atol, int dmin, int dmax )
+{
+    piecewise_binary_cubic_cylinder_projector pbccp;
+
+    double tmin, tmax, tmid;
+    tmin = m_Curve.get_parameter_min();
+    tmax = m_Curve.get_parameter_max();
+    tmid = ( tmin + tmax ) / 2.0;
+
+    if ( wingtype )
+    {
+        piecewise_curve_type crv, telow, teup, le, low, up, rest;
+
+        m_Curve.split( telow, crv, tmin + TMAGIC );
+        crv.split( low, rest, tmid - TMAGIC );
+        crv = rest;
+        crv.split( le, rest, tmid + TMAGIC );
+        crv = rest;
+        crv.split( up, teup, tmax - TMAGIC );
+
+        pbccp.setup( telow, r, ttol, atol, dmin, dmax );
+        pbccp.corner_create( telow );
+
+        pbccp.setup( low, r, ttol, atol, dmin, dmax );
+        pbccp.corner_create( low );
+
+        pbccp.setup( le, r, ttol, atol, dmin, dmax );
+        pbccp.corner_create( le );
+
+        pbccp.setup( up, r, ttol, atol, dmin, dmax );
+        pbccp.corner_create( up );
+
+        pbccp.setup( teup, r, ttol, atol, dmin, dmax );
+        pbccp.corner_create( teup );
+
+        m_Curve = telow;
+        m_Curve.push_back( low );
+        m_Curve.push_back( le );
+        m_Curve.push_back( up );
+        m_Curve.push_back( teup );
+
+        m_Curve.set_tmax( tmax );
+    }
+    else
+    {
+        piecewise_curve_type low, up;
+
+        m_Curve.split( low, up, tmid );
+
+        // Setup copies base curve into creator.
+        // tolerance, min adapt levels, max adapt levels
+        pbccp.setup( low, r, ttol, atol, dmin, dmax );
+        // Create makes new curve
+        pbccp.corner_create( m_Curve );
+
+        pbccp.setup( up, r, ttol, atol, dmin, dmax );
+        pbccp.corner_create( up );
+
+        m_Curve.push_back( up );
+
+        m_Curve.set_tmax( tmax );
+    }
+}
+
 //===== Rotate About X-Axis  =====//
 void VspCurve::RotateX( double ang )
 {
@@ -1370,6 +1515,22 @@ void VspCurve::ScaleY( double s )
 void VspCurve::ScaleZ( double s )
 {
     m_Curve.scale_z( s );
+}
+
+void VspCurve::ZeroI( int i )
+{
+    if ( i == 0 )
+    {
+        m_Curve.scale_x( 0.0 );
+    }
+    else if ( i == 1 )
+    {
+        m_Curve.scale_y( 0.0 );
+    }
+    else
+    {
+        m_Curve.scale_z( 0.0 );
+    }
 }
 
 void VspCurve::ReflectXY()
@@ -1639,7 +1800,7 @@ vector < BezierSegment > VspCurve::GetBezierSegments()
     return seg_vec;
 }
 
-double VspCurve::CreateRoundedRectangle( double w, double h, double k, double sk, double r, bool keycorner )
+void VspCurve::CreateRoundedRectangle( double w, double h, double k, double sk, double vsk, const double & r1, const double & r2, const double & r3, const double & r4, bool keycorner )
 {
     VspCurve edge;
     vector<vec3d> pt;
@@ -1652,21 +1813,9 @@ double VspCurve::CreateRoundedRectangle( double w, double h, double k, double sk
     double wt2 = 0.5 * wt;
     double wb2 = 0.5 * wb;
     double w2 = 0.5 * w;
-    double off = sk * w2;
+    double w_off = sk * w2;
     double h2 = 0.5 * h;
-
-    if ( r > wt2 )
-    {
-        r = wt2;
-    }
-    if ( r > wb2 )
-    {
-        r = wb2;
-    }
-    if ( r > h2 )
-    {
-        r = h2;
-    }
+    double h_off = vsk * h2;
 
     // catch special cases of degenerate cases
     if ( ( w2 == 0 ) || ( h2 == 0 ) )
@@ -1696,14 +1845,14 @@ double VspCurve::CreateRoundedRectangle( double w, double h, double k, double sk
         u.resize( 9 );
 
         // set the segment points
-        pt[0].set_xyz( w,                0, 0 );
-        pt[1].set_xyz( w2 + wb2 - off, -h2, 0 );
-        pt[2].set_xyz( w2 - off,       -h2, 0 );
-        pt[3].set_xyz( w2 - wb2 - off, -h2, 0 );
-        pt[4].set_xyz( 0,                0, 0 );
-        pt[5].set_xyz( w2 - wt2 + off,  h2, 0 );
-        pt[6].set_xyz( w2 + off,        h2, 0 );
-        pt[7].set_xyz( w2 + wt2 + off,  h2, 0 );
+        pt[0].set_xyz( w,                 h_off,        0 );
+        pt[1].set_xyz( w2 + wb2 - w_off, -h2 + h_off,   0 );
+        pt[2].set_xyz( w2 - w_off,       -h2,           0 );
+        pt[3].set_xyz( w2 - wb2 - w_off, -h2 - h_off,   0 );
+        pt[4].set_xyz( 0,                -h_off,        0 );
+        pt[5].set_xyz( w2 - wt2 + w_off,  h2 - h_off,   0 );
+        pt[6].set_xyz( w2 + w_off,        h2,           0 );
+        pt[7].set_xyz( w2 + wt2 + w_off,  h2 + h_off,   0 );
 
         // set the corresponding parameters
         u[0] = 0;
@@ -1757,10 +1906,16 @@ double VspCurve::CreateRoundedRectangle( double w, double h, double k, double sk
     // round all joints if needed
     if ( round_curve )
     {
-        RoundAllJoints( r );
+        vector < double > r_vec{ r1, r2, r3, r4 };
+        // Iterate backwards to avoid adjusting node indices for added corners.
+        for ( int r = r_vec.size() - 1; r >= 0; r-- )
+        {
+            if ( r_vec[r] > 1e-12 )
+            {
+                bool rtn = RoundJoint( r_vec[r], ( 2 * r ) + 1 );
+            }
+        }
     }
-
-    return r;
 }
 
 void VspCurve::ToCubic( double tol )

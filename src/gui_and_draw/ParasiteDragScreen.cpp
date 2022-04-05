@@ -74,7 +74,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_PersistenceLayout.AddX( m_ComponentLabelLayout.GetW() );
 
     // Set up Table Labels Layout in Persistent Space to the Right
-    m_PersistenceLayout.AddSubGroupLayout( m_MainTableLabelsLayout, DRAG_TABLE_WIDTH - m_ComponentLabelLayout.GetW(), m_PersistenceLayout.GetStdHeight() );
+    m_PersistenceLayout.AddSubGroupLayout( m_MainTableLabelsLayout, DRAG_TABLE_WIDTH - m_ComponentLabelLayout.GetW(), layoutHeight - EXECUTE_LAYOUT_HEIGHT );
 
     // Create Scroll Group for Table Labels
     m_MainTableLabelsScrollGroup = m_MainTableLabelsLayout.AddFlScroll( m_PersistenceLayout.GetStdHeight() * 2 );
@@ -82,7 +82,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_PersistenceLayout.AddX( m_MainTableLabelsLayout.GetW() );
 
     // Set up Const Table Labels Layout in Persistnet Space to the Right
-    m_PersistenceLayout.AddSubGroupLayout( m_ConstantTableLabelsLayout, DRAG_TABLE_PERSISTENT_WIDTH, m_PersistenceLayout.GetStdHeight() * 2 );
+    m_PersistenceLayout.AddSubGroupLayout( m_ConstantTableLabelsLayout, DRAG_TABLE_PERSISTENT_WIDTH, layoutHeight - EXECUTE_LAYOUT_HEIGHT );
 
     // Create Scroll Group for Const Labels
     m_ConstTableLabelsScrollGroup = m_ConstantTableLabelsLayout.AddFlScroll( m_PersistenceLayout.GetStdHeight() * 2 );
@@ -91,7 +91,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_PersistenceLayout.AddX( -( m_MainTableLabelsLayout.GetW() + m_ComponentLabelLayout.GetW() ) );
 
     // Set up Table Labels Layout in Persistent Space to the Right
-    m_PersistenceLayout.AddSubGroupLayout( m_TableCompNamesLayout, TYPICAL_INPUT_WIDTH * 2 + 20, m_PersistenceLayout.GetStdHeight() );
+    m_PersistenceLayout.AddSubGroupLayout( m_TableCompNamesLayout, TYPICAL_INPUT_WIDTH * 2 + 20, layoutHeight - EXECUTE_LAYOUT_HEIGHT );
 
     // Create Scroll Group for Table Labels
     m_MainTableCompNamesScrollGroup = m_TableCompNamesLayout.AddFlScroll( drag_table_height - 15 );
@@ -128,7 +128,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_PersistenceLayout.AddX( m_TableLayout.GetW() );
 
     // Set up Constant View Layout
-    m_PersistenceLayout.AddSubGroupLayout( m_ConstantViewLayout, DRAG_TABLE_PERSISTENT_WIDTH, layoutHeight );
+    m_PersistenceLayout.AddSubGroupLayout( m_ConstantViewLayout, DRAG_TABLE_PERSISTENT_WIDTH, layoutHeight - EXECUTE_LAYOUT_HEIGHT );
 
     // Create Scroll Group for Constant Table Rows
     m_ConstantTableScrollGroup = m_ConstantViewLayout.AddFlScroll( drag_table_height - 15 );
@@ -158,7 +158,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_ExecuteLayout.AddButton( m_export, "Export to *.csv" );
     m_ExecuteLayout.ForceNewLine();
 
-    // Add Final Ouputs
+    // Add Final Outputs
     m_ConstantViewLayout.SetSameLineFlag( true );
     m_ConstantViewLayout.SetFitWidthFlag( false );
     m_ConstantViewLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH - 10 );
@@ -437,13 +437,8 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_ExcrescenceListLayout.SetChoiceButtonWidth( TYPICAL_INPUT_WIDTH );
     m_ExcrescenceListLayout.AddDividerBox( "Excrescence List" );
 
-    // Pointer for the widths of each column in the browser to support resizing
-    int* col_widths = new int[3]; // 3 columns
-
-    // Initial column widths & keep the memory address
-    col_widths[0] = 115;
-    col_widths[1] = 111;
-    col_widths[2] = 60;
+    // Initial column widths
+    static int col_widths[] = { 115, 111, 60, 0 }; // 3 columns
 
     m_ExcresBrowser = m_ExcrescenceListLayout.AddColResizeBrowser( col_widths, 3, excrescence_browser_height );
     m_ExcresBrowser->callback( staticScreenCB, this );
@@ -489,7 +484,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_TextBuffer->append( "S_wet \t\t : \t Wetted Area of Geometry, Calculated through DegenGeom \n" );
     m_TextBuffer->append( "L_ref \t\t : \t Reference Length of Geometry, Calculated through Length of Bounding Box in X direction or Chord on a Wing\n" );
     m_TextBuffer->append( "t/c or l/d \t : \t Thickness to Chord Ratio or Fineness Ratio, respectively \n" );
-    m_TextBuffer->append( "FF Equation \t : \t Choosen Form Factor Equation for Internal Calculations \n" );
+    m_TextBuffer->append( "FF Equation \t : \t Chosen Form Factor Equation for Internal Calculations \n" );
     m_TextBuffer->append( "FF \t\t : \t Form Factor of Specific Geometry \n" );
     m_TextBuffer->append( "Re \t\t : \t Reynolds Number for the component \n" );
     m_TextBuffer->append( "% Lam \t\t : \t % Laminar of Flow over Specific Geometry \n" );
@@ -500,12 +495,12 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_TextBuffer->append( "% Total \t : \t Total Percentage of the Drag Contribution of Specific Geometry \n" );
     m_TextBuffer->append( "\n" );
     m_TextBuffer->append( "-- Excrescence Table Quantities -- \n" );
-    m_TextBuffer->append( "Excres. Type \t : \t Choosen type of excrescence (Drag Counts, CD, % of C_D Geom, Drag Area ) \n" );
+    m_TextBuffer->append( "Excres. Type \t : \t Chosen type of excrescence (Drag Counts, CD, % of C_D Geom, Drag Area ) \n" );
     m_TextBuffer->append( "Excres. Input \t : \t User Input Value for Excrescence of Described Type \n" );
     m_TextBuffer->append( "\n" );
     m_TextBuffer->append( "-- User Input Options -- \n" );
-    m_TextBuffer->append( "Lam. Cf Eqn \t : \t Choosen Laminar Equation from Documented List at Link Below \n" );
-    m_TextBuffer->append( "Turb. Cf Eqn \t : \t Choosen Turbulent Equation from Documented List at Link Below \n" );
+    m_TextBuffer->append( "Lam. Cf Eqn \t : \t Chosen Laminar Equation from Documented List at Link Below \n" );
+    m_TextBuffer->append( "Turb. Cf Eqn \t : \t Chosen Turbulent Equation from Documented List at Link Below \n" );
     m_TextBuffer->append( "Spec. Method \t : \t Which Inputs Are to be Used to Determine Re/L and Mach \n" );
     sprintf( str, "Vinf \t\t : \t %s \n", ParasiteDragMgr.m_Vinf.GetDescript().c_str() );
     m_TextBuffer->append( str );
@@ -626,6 +621,8 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
 
 ParasiteDragScreen::~ParasiteDragScreen()
 {
+    m_TextDisplay->buffer( NULL );
+    delete m_TextBuffer;
 }
 
 bool ParasiteDragScreen::Update()
@@ -896,6 +893,8 @@ void ParasiteDragScreen::UpdateExcresTab()
 
     // Update Excres Browser
     char str[256];
+    int h_pos = m_ExcresBrowser->hposition();
+    int v_pos = m_ExcresBrowser->position();
     m_ExcresBrowser->clear();
     m_ExcresBrowser->column_char( ':' );
 
@@ -936,6 +935,9 @@ void ParasiteDragScreen::UpdateExcresTab()
         sprintf( str, formatString.c_str(), excres_name.c_str(), excres_type.c_str(), excres_val );
         m_ExcresBrowser->add( str );
     }
+
+    m_ExcresBrowser->hposition( h_pos );
+    m_ExcresBrowser->position( v_pos );
 
     for ( size_t i = 0; i < excresVec.size(); ++i )
     {
@@ -1160,9 +1162,9 @@ void ParasiteDragScreen::GuiDeviceCallBack( GuiDevice* device )
     }
     else if ( device == &m_EqnDocumentation )
     {
-#ifdef  __APPLE__
+#if     defined(__APPLE__)
         system( "open http://www.openvsp.org/wiki/doku.php?id=parasitedrag" );
-#elif   WIN32
+#elif   defined(_WIN32) || defined(WIN32) 
         ShellExecute( NULL, "open", "http://www.openvsp.org/wiki/doku.php?id=parasitedrag",
                       NULL, NULL, SW_SHOWNORMAL );
 #else

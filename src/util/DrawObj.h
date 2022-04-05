@@ -172,6 +172,7 @@ public:
         vec3d End;
         vec3d Offset;
         string Label;
+        int Dir;
     };
 
     /*
@@ -212,7 +213,7 @@ public:
     * Information needed to define a material.
     *
     * Ambient - Ambient value for this material.
-    * Diffuse - Diffuse value for this mateiral.
+    * Diffuse - Diffuse value for this material.
     * Specular - Specular value for this material.
     * Emission - Emission value for this material.
     * Shininess - Shine value, the value is between 0 and 128.

@@ -493,12 +493,7 @@ void ManageGeomScreen::GeomBrowserCallback()
     m_VehiclePtr->SetActiveGeomVec( selVec );
     LoadActiveGeomOutput();
 
-//  m_ScreenMgr->UpdateAllScreens();
     ShowHideGeomScreens();
-
-//jrg FIX!!!
-//  aircraftPtr->triggerDraw();
-
 }
 
 //==== Show/NoShow Active Geoms and Children ====//
@@ -528,8 +523,6 @@ void ManageGeomScreen::NoShowActiveGeoms( bool flag )
         }
     }
 
-//jrg FIX!!!
-//  aircraftPtr->triggerDraw();
     LoadBrowser();
 }
 
@@ -547,11 +540,7 @@ void ManageGeomScreen::SelectAll()
 
     LoadActiveGeomOutput();
 
-    m_GeomScreenVec[MULT_GEOM_SCREEN]->Show();
-
-//jrg FIX!!!
-//  aircraftPtr->triggerDraw();
-
+    ShowHideGeomScreens();
 }
 
 //===== Select Geom Set ====//
@@ -567,6 +556,7 @@ void ManageGeomScreen::SelectSet( int set )
     }
 
     LoadActiveGeomOutput();
+    ShowHideGeomScreens();
 }
 
 //==== Load Active Geom IDs and Children ===//
@@ -601,9 +591,10 @@ void ManageGeomScreen::SetGeomDisplayChoice( int type )
     vector< Geom* > geom_vec = m_VehiclePtr->FindGeomVec( geom_id_vec );
     for ( int i = 0; i < (int)geom_vec.size(); i++ )
     {
-        if ( geom_vec[i] && type != 4 )
+        if ( geom_vec[i] && type <= vsp::DISPLAY_TYPE::DISPLAY_DEGEN_CAMBER )
         {
             geom_vec[i]->m_GuiDraw.SetDisplayType( type );
+            geom_vec[i]->ResetGeomChangedFlag( true ); // Redraw the wire mesh
         }
     }
 
@@ -710,6 +701,8 @@ void ManageGeomScreen::ShowHideGeomScreens()
     {
         m_GeomScreenVec[i]->Show();
     }
+
+    m_GeomScreenVec[MULT_GEOM_SCREEN]->Show();
 }
 
 //==== Show or Hide Subsurface Lines ====//

@@ -1233,7 +1233,7 @@ void FeaMeshMgrSingleton::SetFixPointBorderNodes()
 {
     for ( size_t n = 0; n < m_NumFeaFixPoints; n++ )
     {
-        // Idenitfy and set FeaFixPoints on border curves
+        // Identify and set FeaFixPoints on border curves
         for ( size_t j = 0; j < m_FixPntSurfIndMap[n].size(); j++ )
         {
             // Only check for FeaFixPoints on two surfaces. Nodes are automatically set for more than two surface intersections
@@ -1321,7 +1321,7 @@ void FeaMeshMgrSingleton::SetFixPointBorderNodes()
 
 void FeaMeshMgrSingleton::CheckFixPointIntersects()
 {
-    // Idenitfy and set FeaFixPoints on intersection curves
+    // Identify and set FeaFixPoints on intersection curves
 
     for ( size_t n = 0; n < m_NumFeaFixPoints; n++ )
     {
@@ -2468,7 +2468,7 @@ void FeaMeshMgrSingleton::WriteNASTRAN( const string &filename )
         rewind( temp );
 
         // Allocate memory to contain the whole file:
-        char * buffer = (char*)malloc( sizeof( char )*lSize );
+        char * buffer = (char*)malloc( sizeof( char )*lSize + 1 );
         if ( buffer == NULL )
         {
             addOutputText( "WriteNASTRAN memory error\n" );
@@ -2476,6 +2476,7 @@ void FeaMeshMgrSingleton::WriteNASTRAN( const string &filename )
 
         // Copy the file into the buffer:
         size_t result = fread( buffer, 1, lSize, temp );
+        buffer[ result ] = '\0';
         if ( result != lSize )
         {
             addOutputText( "WriteNASTRAN reading error\n" );
@@ -2484,7 +2485,7 @@ void FeaMeshMgrSingleton::WriteNASTRAN( const string &filename )
         // The whole file is now loaded in the memory buffer. Write to NASTRAN file
         fprintf( fp, "%s", buffer );
 
-        // Close open files and free memmory
+        // Close open files and free memory
         fclose( fp );
         fclose( temp );
         free( buffer );

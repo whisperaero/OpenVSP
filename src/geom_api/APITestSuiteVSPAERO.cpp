@@ -163,7 +163,7 @@ void APITestSuiteVSPAERO::TestVSPAeroCreateModel()
     //==== Set Control Surface Group Deflection Angle ====//
     printf( "\tSetting control surface group deflection angles..." );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );
-    //  setup asymetric deflection for aileron
+    //  setup asymmetric deflection for aileron
     string deflection_gain_id;
     // subsurfaces get added to groups with "CSGQualities_[geom_name]_[control_surf_name]"
     // subsurfaces gain parm name is "Surf[surfndx]_Gain" starting from 0 to NumSymmetricCopies-1
@@ -240,6 +240,7 @@ void APITestSuiteVSPAERO::TestVSPAeroComputeGeom()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
 
     // Get & Display Results
@@ -271,7 +272,8 @@ void APITestSuiteVSPAERO::TestVSPAeroControlSurfaceDeflection()
     }
 
     printf( "\t\tExecuting Comp Geom..." );
-    vsp::ExecAnalysis( "VSPAEROComputeGeometry" );
+    string results_id = vsp::ExecAnalysis( "VSPAEROComputeGeometry" );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
 
     // Find All Control Surface IDs to be used in Gain Parm Names
@@ -315,7 +317,8 @@ void APITestSuiteVSPAERO::TestVSPAeroControlSurfaceDeflection()
     vector <int> num_wake_iter;
     num_wake_iter.push_back( 1 );
     vsp::SetIntAnalysisInput( analysis_name, "WakeNumIter", num_wake_iter );
-    string results_id = vsp::ExecAnalysis( analysis_name );
+    results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n" );
 
     // Check for within 5% of v3.13 Rolling Moment
@@ -338,6 +341,7 @@ void APITestSuiteVSPAERO::TestVSPAeroControlSurfaceDeflection()
     printf( "\n\t\tExecuting..." );
     vsp::SetIntAnalysisInput( analysis_name, "WakeNumIter", num_wake_iter );
     results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
 
     // Check for within 5% of v3.11 Rolling Moment
@@ -390,6 +394,7 @@ void APITestSuiteVSPAERO::TestVSPAeroComputeGeomPanel()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -465,6 +470,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSinglePointPanel()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -534,6 +540,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSinglePoint()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -610,6 +617,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSinglePointStab()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -666,7 +674,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSinglePointUnsteady()
     vsp::SetDoubleAnalysisInput( analysis_name, "bref", bref );
     std::vector< double > cref; cref.push_back( 3 );
     vsp::SetDoubleAnalysisInput( analysis_name, "cref", cref );
-    std::vector< int > ref_flag; ref_flag.push_back( 3 );
+    std::vector< int > ref_flag; ref_flag.push_back( 0 );
     vsp::SetIntAnalysisInput( analysis_name, "RefFlag", ref_flag );
     //    freestream parameters
     std::vector< double > alpha; alpha.push_back( 4.0 );
@@ -689,6 +697,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSinglePointUnsteady()
     // Execute
     printf( "\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -778,6 +787,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSweep()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -869,6 +879,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSweepBatch()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -931,7 +942,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSharpTrailingEdge()
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
     //==== Setup export filenames ====//
-    // Execution of one of these methods is required to propperly set the export filenames for creation of vspaero input files and execution commands
+    // Execution of one of these methods is required to properly set the export filenames for creation of vspaero input files and execution commands
     string fname_sharptrailingedge = "apitest_VSPAeroSharpTrailingEdge.vsp3";
     printf( "\tSetting export name: %s\n", fname_sharptrailingedge.c_str( ) );
     vsp::SetVSP3FileName( fname_sharptrailingedge );  // this still needs to be done even if a call to WriteVSPFile is made
@@ -957,6 +968,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSharpTrailingEdge()
     // Execute
     printf( "\tExecuting...\n" );
     string compgeom_resid = vsp::ExecAnalysis( compgeom_name );
+    TEST_ASSERT( compgeom_resid.size() > 0 );
     printf( "COMPLETE\n" );
 
     // Get & Display Results
@@ -997,16 +1009,18 @@ void APITestSuiteVSPAERO::TestVSPAeroSharpTrailingEdge()
     // Execute
     printf( "\tExecuting...\n" );
     string results_id = vsp::ExecAnalysis( analysis_name  );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
     // Get & Display Results
     vsp::PrintResults( results_id );
 
-    vector<string>res_id = vsp::GetStringResults( results_id, "ResultsVec" , 0 );
+    string history_res= vsp::FindLatestResultsID( "VSPAERO_History" );
+    string load_res = vsp::FindLatestResultsID( "VSPAERO_Load" );
 
-    vector<double> CL = vsp::GetDoubleResults( res_id[0], "CL", 0 );
-    vector<double> cl = vsp::GetDoubleResults( res_id[1], "cl", 0 );
+    vector<double> CL = vsp::GetDoubleResults( history_res, "CL", 0 );
+    vector<double> cl = vsp::GetDoubleResults( load_res, "cl", 0 );
 
     printf( "   CL: " );
     for ( unsigned int i = 0; i < CL.size(); i++ )
@@ -1092,7 +1106,7 @@ void APITestSuiteVSPAERO::TestVSPAeroBluntTrailingEdge()
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
     //==== Setup export filenames ====//
-    // Execution of one of these methods is required to propperly set the export filenames for creation of vspaero input files and execution commands
+    // Execution of one of these methods is required to properly set the export filenames for creation of vspaero input files and execution commands
     string fname_blunttrailingedge = "apitest_VSPAeroBluntTrailingEdge.vsp3";
     printf( "\tSetting export name: %s\n", fname_blunttrailingedge.c_str( ) );
     vsp::SetVSP3FileName( fname_blunttrailingedge );  // this still needs to be done even if a call to WriteVSPFile is made
@@ -1118,6 +1132,7 @@ void APITestSuiteVSPAERO::TestVSPAeroBluntTrailingEdge()
     // Execute
     printf( "\tExecuting...\n" );
     string compgeom_resid = vsp::ExecAnalysis( compgeom_name );
+    TEST_ASSERT( compgeom_resid.size() > 0 );
     printf( "COMPLETE\n" );
 
     // Get & Display Results
@@ -1158,16 +1173,18 @@ void APITestSuiteVSPAERO::TestVSPAeroBluntTrailingEdge()
     // Execute
     printf( "\tExecuting...\n" );
     string results_id = vsp::ExecAnalysis( analysis_name  );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
     // Get & Display Results
     vsp::PrintResults( results_id );
 
-    vector<string>res_id = vsp::GetStringResults( results_id, "ResultsVec", 0 );
+    string history_res = vsp::FindLatestResultsID( "VSPAERO_History" );
+    string load_res = vsp::FindLatestResultsID( "VSPAERO_Load" );
 
-    vector<double> CL = vsp::GetDoubleResults( res_id[0], "CL", 0 );
-    vector<double> cl = vsp::GetDoubleResults( res_id[1], "cl", 0 );
+    vector<double> CL = vsp::GetDoubleResults( history_res, "CL", 0 );
+    vector<double> cl = vsp::GetDoubleResults( load_res, "cl", 0 );
 
     printf( "   CL: " );
     for ( unsigned int i = 0; i < CL.size(); i++ )
@@ -1245,7 +1262,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSupersonicDeltaWing()
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
     //==== Setup export filenames ====//
-    // Execution of one of these methods is required to propperly set the export filenames for creation of vspaero input files and execution commands
+    // Execution of one of these methods is required to properly set the export filenames for creation of vspaero input files and execution commands
     string fname_deltawing = "apitest_VSPAeroSupersonicDeltaWing.vsp3";
     printf( "\tSetting export name: %s\n", fname_deltawing.c_str( ) );
     vsp::SetVSP3FileName( fname_deltawing );  // this still needs to be done even if a call to WriteVSPFile is made
@@ -1271,6 +1288,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSupersonicDeltaWing()
     // Execute
     printf( "\tExecuting...\n" );
     string compgeom_resid = vsp::ExecAnalysis( compgeom_name );
+    TEST_ASSERT( compgeom_resid.size() > 0 );
     printf( "COMPLETE\n" );
 
     // Get & Display Results
@@ -1324,6 +1342,7 @@ void APITestSuiteVSPAERO::TestVSPAeroSupersonicDeltaWing()
     // Execute
     printf( "\tExecuting...\n" );
     string results_id = vsp::ExecAnalysis( analysis_name  );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 
@@ -1709,6 +1728,7 @@ void APITestSuiteVSPAERO::TestVSPAeroCpSlicer()
     // Execute
     printf( "\n\t\tExecuting..." );
     string results_id = vsp::ExecAnalysis( analysis_name );
+    TEST_ASSERT( results_id.size() > 0 );
     printf( "COMPLETE\n\n" );
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE
 

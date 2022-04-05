@@ -8,7 +8,7 @@
 #include "WireGeom.h"
 #include "Vehicle.h"
 #include "StringUtil.h"
-#include "Util.h"
+#include "VspUtil.h"
 
 //==== Constructor ====//
 WireGeom::WireGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
@@ -521,11 +521,11 @@ void WireGeom::UpdateDrawObj()
 }
 
 //==== Get Total Transformation Matrix from Original Points ====//
-Matrix4d WireGeom::GetTotalTransMat()
+Matrix4d WireGeom::GetTotalTransMat() const
 {
     Matrix4d retMat;
-    retMat.initMat( m_ScaleMatrix.data() );
-    retMat.postMult( m_ModelMatrix.data() );
+    retMat.initMat( m_ScaleMatrix );
+    retMat.postMult( m_ModelMatrix );
 
     return retMat;
 }
@@ -597,6 +597,7 @@ void WireGeom::ReadP3D( FILE* fp, int ni, int nj, int nk )
 
     m_InvertFlag = CheckInverted();
 
+    SetDirtyFlag( GeomBase::SURF );
     Update();
 }
 
@@ -632,6 +633,7 @@ void WireGeom::ReadXSec( FILE* fp )
 
     m_InvertFlag = CheckInverted();
 
+    SetDirtyFlag( GeomBase::SURF );
     Update();
 }
 
@@ -778,7 +780,7 @@ bool WireGeom::CheckInverted()
 }
 
 //==== Create TMesh Vector ====//
-vector< TMesh* > WireGeom::CreateTMeshVec()
+vector< TMesh* > WireGeom::CreateTMeshVec() const
 {
     vector < TMesh* > tmeshvec;
 
@@ -871,7 +873,7 @@ void WireGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview )
 
 }
 
-int WireGeom::GetNumTotalHrmSurfs()
+int WireGeom::GetNumTotalHrmSurfs() const
 {
     return 1;
 }

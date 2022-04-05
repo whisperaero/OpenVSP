@@ -68,7 +68,7 @@ public:
     *
     * index - index of the save.  Index is zero based.
     * If index is already used, its content will be
-    * overwrited with new camera system.
+    * overwritten with new camera system.
     */
     virtual void save( int index ) = 0;
 
@@ -128,6 +128,13 @@ public:
     * cx, cy - current xy mouse location.
     */
     virtual void zoom( int px, int py, int cx, int cy ) = 0;
+
+    /*!
+    * Zoom in or out.
+    *
+    * dx, dy - mouse scroll change.
+    */
+    virtual void zoom( int dx, int dy ) = 0;
 
     /*!
     * Zoom in or out relative to a point in world space.

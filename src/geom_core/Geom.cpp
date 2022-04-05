@@ -107,6 +107,7 @@ GeomBase::GeomBase( Vehicle* vehicle_ptr )
     m_XFormDirty = true;
     m_SurfDirty = true;
     m_TessDirty = true;
+    m_HighlightDirty = true;
 }
 
 //==== Destructor ====//
@@ -122,6 +123,7 @@ GeomBase::~GeomBase()
 // XForm - position, orientation, symmetry, attachment of Geom
 // Surf - everything else (requires re-lofting m_MainSurfVec)
 // Tess - tessellation resolution (requires re-tessellation)
+// Highlight - active section highlighting
 //
 // This works in conjunction with strategic caching.  m_MainSurfVec, m_SurfVec, m_MainTessVec, m_TessVec are all
 // cached to allow minimal updates according to the classified dirty flags.
@@ -184,6 +186,12 @@ void GeomBase::SetDirtyFlags( Parm* parm_ptr )
     {
         // Don't dirty anything, BBox Parms are output Parms and should not trigger updates.
     }
+    else if ( gname == string("Index") )
+    {
+        m_HighlightDirty = true;
+        // GeomXSec::m_ActiveXSec
+        // WingGeom::m_ActiveAirfoil
+    }
     else
     {
         m_SurfDirty = true;
@@ -205,6 +213,10 @@ void GeomBase::SetDirtyFlag( int dflag )
     {
         m_SurfDirty = true;
     }
+    else if ( dflag == HIGHLIGHT )
+    {
+        m_HighlightDirty = true;
+    }
 }
 
 //==== Parm Changed ====//
@@ -223,7 +235,7 @@ void GeomBase::ParmChanged( Parm* parm_ptr, int type )
         return;
     }
 
-    //==== Check For Interactive Collision Dectection When Alt Key Is Pressed ====//
+    //==== Check For Interactive Collision Detection When Alt Key Is Pressed ====//
     if ( type == Parm::SET_FROM_DEVICE )
     {
         if ( parm_ptr )
@@ -258,7 +270,7 @@ bool GeomBase::UpdatedParm( const string & id )
     return false;
 }
 
-//==== Recusively Load ID and Childrens ID Into Vec  =====//
+//==== Recursively Load ID and Childrens ID Into Vec  =====//
 void GeomBase::LoadIDAndChildren( vector< string > & id_vec, bool check_display_flag )
 {
     id_vec.push_back( m_ID );
@@ -887,9 +899,13 @@ Geom::Geom( Vehicle* vehicle_ptr ) : GeomXForm( vehicle_ptr )
 
     // Mass Properties
     m_Density.Init( "Density", "Mass_Props", this, 1, 0.0, 1e12 );
+    m_Density.SetDescript("Volumetric density (mass/len^3)");
     m_MassArea.Init( "Mass_Area", "Mass_Props", this, 1, 0.0, 1e12 );
+    m_MassArea.SetDescript("Areal density (mass/len^2)");
     m_MassPrior.Init( "Mass_Prior", "Mass_Props", this, 0, 0, 1e12 );
+    m_MassPrior.SetDescript("Priority for volume overlap.  Highest priority wins.");
     m_ShellFlag.Init( "Shell_Flag", "Mass_Props", this, false, 0, 1 );
+    m_ShellFlag.SetDescript("Flag to turn on/off area-based mass contribution");
 
     // Negative Volume Properties
     m_NegativeVolumeFlag.Init( "Negative_Volume_Flag", "Negative_Volume_Props", this, false, 0, 1);
@@ -1034,7 +1050,7 @@ void Geom::SetSetFlag( int index, bool f )
 }
 
 //==== Get Set Flag ====//
-bool Geom::GetSetFlag( int index )
+bool Geom::GetSetFlag( int index ) const
 {
     if ( index >= 0 && index < ( int )m_SetFlags.size() )
     {
@@ -1114,14 +1130,22 @@ void Geom::Update( bool fullupdate )
     if ( m_SurfDirty )
         UpdateEndCaps();
 
-    if ( fullupdate && m_SurfDirty )
+    if ( fullupdate )
     {
-        UpdateFeatureLines();
+        if ( m_SurfDirty )
+            UpdateFeatureLines();
     }
 
     if ( m_SurfDirty )
     {
         UpdateFlags();  // Needs to be after m_MainSurfVec is populated, but before m_SurfVec
+    }
+
+    // Sets cluster parameters on m_MainSurfVec[0] for wings etc.
+    // Needs to be before m_MainSurfVec is copied to m_SurfVec.
+    if ( m_SurfDirty || m_TessDirty )
+    {
+        UpdatePreTess();
     }
 
     if ( m_XFormDirty || m_SurfDirty )
@@ -1148,19 +1172,21 @@ void Geom::Update( bool fullupdate )
         }
     }
 
-    // Tessellate MainSurfVec
-    if ( m_SurfDirty || m_TessDirty )
+    if ( fullupdate )
     {
-        UpdatePreTess();
-        UpdateMainTessVec();
-        UpdateMainDegenGeomPreview();
-    }
+        // Tessellate MainSurfVec
+        if ( m_SurfDirty || m_TessDirty )
+        {
+            UpdateMainTessVec();
+            UpdateMainDegenGeomPreview();
+        }
 
-    // Copy Tessellation for symmetry and XForm
-    if ( m_XFormDirty || m_SurfDirty || m_TessDirty )
-    {
-        UpdateTessVec();
-        UpdateDegenGeomPreview();
+        // Copy Tessellation for symmetry and XForm
+        if ( m_XFormDirty || m_SurfDirty || m_TessDirty )
+        {
+            UpdateTessVec();
+            UpdateDegenGeomPreview();
+        }
     }
 
     if ( m_XFormDirty || m_SurfDirty )
@@ -1173,6 +1199,11 @@ void Geom::Update( bool fullupdate )
         if ( m_XFormDirty || m_SurfDirty || m_TessDirty )
         {
             UpdateDrawObj();  // Needs to happen for both XForm and Surf updates.
+        }
+
+        if ( m_XFormDirty || m_SurfDirty || m_HighlightDirty )
+        {
+            UpdateHighlightDrawObj();
         }
     }
 
@@ -1187,6 +1218,8 @@ void Geom::Update( bool fullupdate )
     m_SurfDirty = false;
 
     m_TessDirty = false;
+
+    m_HighlightDirty = false;
 
     UpdateChildren( fullupdate );
 
@@ -1229,7 +1262,7 @@ void Geom::GetUWTess01( int indx, vector < double > &u, vector < double > &w )
 // Geom::WritePovRay
 // Geom::WriteX3D
 // Geom::WriteXSecFile
-void Geom::UpdateTesselate( int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms, bool degen )
+void Geom::UpdateTesselate( int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms, bool degen ) const
 {
     vector< vector< vec3d > > uw_pnts;
     UpdateTesselate( m_SurfVec, indx, pnts, norms, uw_pnts, degen );
@@ -1242,14 +1275,14 @@ void Geom::UpdateTesselate( int indx, vector< vector< vec3d > > &pnts, vector< v
 // Geom::CreateTMeshVec
 // Geom::GetUWTess01
 void Geom::UpdateTesselate( int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms,
-                            vector< vector< vec3d > > &uw_pnts, bool degen )
+                            vector< vector< vec3d > > &uw_pnts, bool degen ) const
 {
     UpdateTesselate( m_SurfVec, indx, pnts, norms, uw_pnts, degen );
 }
 
 // ver. C
 // Low-level version that allows passing an arbitrary surf_vec as an argument.  Designed to be called for
-// m_MainSurfVec or m_SurfVec interchangably.
+// m_MainSurfVec or m_SurfVec interchangeably.
 //
 // Called from:
 // Geom::CreateDegenGeom
@@ -1258,13 +1291,13 @@ void Geom::UpdateTesselate( int indx, vector< vector< vec3d > > &pnts, vector< v
 //
 // Overridden by:
 // XXXGeom::UpdateTesselate to provide base functionality.
-void Geom::UpdateTesselate( vector<VspSurf> &surf_vec, int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms,
-                            vector< vector< vec3d > > &uw_pnts, bool degen )
+void Geom::UpdateTesselate( const vector<VspSurf> &surf_vec, int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms,
+                            vector< vector< vec3d > > &uw_pnts, bool degen ) const
 {
     surf_vec[indx].Tesselate( m_TessU(), m_TessW(), pnts, norms, uw_pnts, m_CapUMinTess(), degen );
 }
 
-void Geom::UpdateSplitTesselate( vector<VspSurf> &surf_vec, int indx, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms)
+void Geom::UpdateSplitTesselate( const vector<VspSurf> &surf_vec, int indx, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms) const
 {
     surf_vec[indx].SplitTesselate( m_TessU(), m_TessW(), pnts, norms, m_CapUMinTess() );
 }
@@ -1695,7 +1728,7 @@ void Geom::WriteFeatureLinesDXF( FILE * file_name, const BndBox &dxfbox )
     bool color = m_Vehicle->m_DXFColorFlag.Get();
 
     vector<VspSurf> surf_vec;
-    GetSurfVec( surf_vec );
+    surf_vec = GetSurfVecConstRef();
 
     // Bounding box diagonal, used to separate multi-view drawings
     vec3d shiftvec = dxfbox.GetMax() - dxfbox.GetMin();
@@ -1707,24 +1740,21 @@ void Geom::WriteFeatureLinesDXF( FILE * file_name, const BndBox &dxfbox )
     {
         vector < vector < vec3d > > allflines, allflines1, allflines2, allflines3, allflines4;
 
-        if ( m_GuiDraw.GetDispFeatureFlag() )
+        unsigned int nu = surf_vec[i].GetNumUFeature();
+        unsigned int nw = surf_vec[i].GetNumWFeature();
+        allflines.resize( nu + nw );
+        for ( int j = 0; j < nu; j++ )
         {
-            unsigned int nu = surf_vec[i].GetNumUFeature();
-            unsigned int nw = surf_vec[i].GetNumWFeature();
-            allflines.resize( nu + nw );
-            for ( int j = 0; j < nu; j++ )
-            {
-                surf_vec[i].TessUFeatureLine( j, allflines[j], tol );
+            surf_vec[i].TessUFeatureLine( j, allflines[j], tol );
 
-                // Shift Feature Lines back near the orgin for multi-view case:
-                if ( m_Vehicle->m_DXF2D3DFlag() != vsp::DIMENSION_SET::SET_3D )
+            // Shift Feature Lines back near the orgin for multi-view case:
+            if ( m_Vehicle->m_DXF2D3DFlag() != vsp::DIMENSION_SET::SET_3D )
+            {
+                for ( unsigned int k = 0; k < allflines[j].size(); k++ )
                 {
-                    for ( unsigned int k = 0; k < allflines[j].size(); k++ )
-                    {
-                        allflines[j][k].offset_x( -to_orgin.x() );
-                        allflines[j][k].offset_y( -to_orgin.y() );
-                        allflines[j][k].offset_z( -to_orgin.z() );
-                    }
+                    allflines[j][k].offset_x( -to_orgin.x() );
+                    allflines[j][k].offset_y( -to_orgin.y() );
+                    allflines[j][k].offset_z( -to_orgin.z() );
                 }
             }
 
@@ -2017,7 +2047,7 @@ void Geom::WriteFeatureLinesSVG( xmlNodePtr root, const BndBox &svgbox )
     double tol = 10e-2; // Feature line Tessellation tolerance
 
     vector<VspSurf> surf_vec;
-    GetSurfVec( surf_vec );
+    surf_vec = GetSurfVecConstRef();
 
     // Bounding box diagonal, used to separate multi-view drawings
     vec3d shiftvec = svgbox.GetMax() - svgbox.GetMin();
@@ -2029,36 +2059,33 @@ void Geom::WriteFeatureLinesSVG( xmlNodePtr root, const BndBox &svgbox )
     {
         vector < vector < vec3d > > allflines, allflines1, allflines2, allflines3, allflines4;
 
-        if( m_GuiDraw.GetDispFeatureFlag() )
+        unsigned int nu = surf_vec[i].GetNumUFeature();
+        unsigned int nw = surf_vec[i].GetNumWFeature();
+        allflines.resize( nw + nu );
+        for( int j = 0; j < nw; j++ )
         {
-            unsigned int nu = surf_vec[i].GetNumUFeature();
-            unsigned int nw = surf_vec[i].GetNumWFeature();
-            allflines.resize( nw + nu );
-            for( int j = 0; j < nw; j++ )
+            surf_vec[i].TessWFeatureLine( j, allflines[ j ], tol );
+
+            // To Do: multiple view ports instead of shifting feature lines in a single view port
+
+            // Shift Feature Lines back near the orgin:
+            for ( unsigned int k = 0; k < allflines[j].size(); k++ )
             {
-                surf_vec[i].TessWFeatureLine( j, allflines[ j ], tol );
-
-                // To Do: multiple view ports instead of shifting feature lines in a single view port
-
-                // Shift Feature Lines back near the orgin:
-                for ( unsigned int k = 0; k < allflines[j].size(); k++ )
-                {
-                    allflines[j][k].offset_x( -to_orgin.x() );
-                    allflines[j][k].offset_y( -to_orgin.y() );
-                    allflines[j][k].offset_z( -to_orgin.z() );
-                }
+                allflines[j][k].offset_x( -to_orgin.x() );
+                allflines[j][k].offset_y( -to_orgin.y() );
+                allflines[j][k].offset_z( -to_orgin.z() );
             }
-            for( int j = 0; j < nu; j++ )
-            {
-                surf_vec[i].TessUFeatureLine( j, allflines[ j + nw ], tol );
+        }
+        for( int j = 0; j < nu; j++ )
+        {
+            surf_vec[i].TessUFeatureLine( j, allflines[ j + nw ], tol );
 
-                // Shift Feature Lines back near the orgin :
-                for ( unsigned int k = 0; k < allflines[j + nw].size(); k++ )
-                {
-                    allflines[j + nw][k].offset_x( -to_orgin.x() );
-                    allflines[j + nw][k].offset_y( -to_orgin.y() );
-                    allflines[j + nw][k].offset_z( -to_orgin.z() );
-                }
+            // Shift Feature Lines back near the orgin :
+            for ( unsigned int k = 0; k < allflines[j + nw].size(); k++ )
+            {
+                allflines[j + nw][k].offset_x( -to_orgin.x() );
+                allflines[j + nw][k].offset_y( -to_orgin.y() );
+                allflines[j + nw][k].offset_z( -to_orgin.z() );
             }
         }
 
@@ -2221,6 +2248,22 @@ void Geom::UpdateDrawObj()
     m_WireShadeDrawObj_vec[2].m_GeomChanged = true;
     m_WireShadeDrawObj_vec[3].m_GeomChanged = true;
 
+    // Pre-calculate and allocate for number of feature line segments.
+    // Identified by profiling as a substantial cost.
+    int numfealineseg = 0;
+    for ( int i = 0 ; i < GetNumTotalSurfs() ; i++ )
+    {
+        int nfl = m_FeatureTessVec[i].m_ptline.size();
+
+        for( int j = 0; j < nfl; j++ )
+        {
+            int n = m_FeatureTessVec[i].m_ptline[j].size() - 1;
+
+            numfealineseg += 2 * n;
+        }
+    }
+    m_FeatureDrawObj_vec[0].m_PntVec.reserve( numfealineseg );
+
     //==== Tesselate Surface ====//
     for ( int i = 0 ; i < GetNumTotalSurfs() ; i++ )
     {
@@ -2252,8 +2295,6 @@ void Geom::UpdateDrawObj()
             for( int j = 0; j < nfl; j++ )
             {
                 int n = m_FeatureTessVec[i].m_ptline[j].size() - 1;
-
-                m_FeatureDrawObj_vec[0].m_PntVec.reserve( m_FeatureDrawObj_vec[0].m_PntVec.size() + 2 * n );
 
                 for ( int k = 0; k < n; k++ )
                 {
@@ -2604,7 +2645,7 @@ void Geom::UpdateDegenDrawObj()
 // multiple blades.
 void Geom::UpdateMainTessVec( bool firstonly )
 {
-    double tol = 1e-2;
+    double tol = 1e-3;
 
     int nmain = GetNumMainSurfs();
 
@@ -3105,11 +3146,11 @@ void Geom::ReadV2File( xmlNodePtr &root )
 */
 }
 
-void Geom::ResetGeomChangedFlag()
+void Geom::ResetGeomChangedFlag( bool flag )
 {
     for ( int i = 0 ; i < ( int )m_WireShadeDrawObj_vec.size() ; i++ )
     {
-        m_WireShadeDrawObj_vec[i].m_GeomChanged = false;
+        m_WireShadeDrawObj_vec[i].m_GeomChanged = flag;
     }
 }
 
@@ -3481,12 +3522,12 @@ void Geom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     }
 }
 
-void Geom::SetColor( int r, int g, int b )
+void Geom::SetColor( double r, double g, double b )
 {
     m_GuiDraw.SetWireColor( r, g, b );
 }
 
-vec3d Geom::GetColor()
+vec3d Geom::GetColor() const
 {
     return m_GuiDraw.GetWireColor();
 }
@@ -3636,7 +3677,7 @@ void Geom::CreateDegenGeom( vector<DegenGeom> &dgs, const vector< vector< vec3d 
 }
 
 //==== Set Sym Flag ====//
-int Geom::GetSymFlag()
+int Geom::GetSymFlag() const
 {
     return m_SymPlanFlag() | m_SymAxFlag();
 }
@@ -3664,18 +3705,18 @@ VspSurf* Geom::GetMainSurfPtr( int indx )
 }
 
 //==== Count Number of Sym Surfaces ====//
-int Geom::GetNumTotalSurfs()
+int Geom::GetNumTotalSurfs() const
 {
     return GetNumSymmCopies() * GetNumMainSurfs();
 }
 
-int Geom::GetNumTotalHrmSurfs()
+int Geom::GetNumTotalHrmSurfs() const
 {
     return GetNumTotalSurfs();
 }
 
 //==== Count Number of Sym Copies of Each Surface ====//
-int Geom::GetNumSymmCopies()
+int Geom::GetNumSymmCopies() const
 {
     int symFlag = GetSymFlag();
     int numSymCopies = 1;
@@ -3697,7 +3738,7 @@ int Geom::GetNumSymmCopies()
 }
 
 //==== Count Number of Sym Flags ====//
-int Geom::GetNumSymFlags()
+int Geom::GetNumSymFlags() const
 {
     int numSymFlags = 0;
     int symFlag = GetSymFlag();
@@ -3719,6 +3760,11 @@ int Geom::GetSurfType( int indx ) const
 int Geom::GetMainSurfType( int indx ) const
 {
     return m_MainSurfVec[indx].GetSurfType();
+}
+
+int Geom::GetMainCFDSurfType( int indx ) const
+{
+    return m_MainSurfVec[indx].GetSurfCfdType();
 }
 
 bool Geom::GetFlipNormal( int indx ) const
@@ -3844,7 +3890,7 @@ void Geom::WriteSeligAirfoil( const string & file_name, double foilsurf_u_locati
 
     for ( size_t i = 0; i < ordered_vec.size(); i++ )
     {
-        fprintf( file_id, "%17.16f, %17.16f\n", ordered_vec[i].x(), ordered_vec[i].y() );
+        fprintf( file_id, "%17.16f %17.16f\n", ordered_vec[i].x(), ordered_vec[i].y() );
     }
 
     fclose( file_id );
@@ -3886,7 +3932,7 @@ vector < vec3d > Geom::GetAirfoilCoordinates( double foilsurf_u_location )
         }
     }
 
-    // Tessealte along upper and lower V values
+    // Tessellate along upper and lower V values
     foil_curve.Tesselate( Vlow, lower_pnts );
     foil_curve.Tesselate( Vup, upper_pnts );
 
@@ -3958,7 +4004,7 @@ void Geom::WriteAirfoilFiles( FILE* meta_fid )
                 {
                     utess_vec.push_back( sec->m_SectTessU() );
 
-                    if ( j > 1 ) // Only inlclude airfoils at start and end of XSec for first XSec
+                    if ( j > 1 ) // Only include airfoils at start and end of XSec for first XSec
                     {
                         num_foil += sec->m_SectTessU() - 1;
                     }
@@ -4007,7 +4053,7 @@ void Geom::WriteAirfoilFiles( FILE* meta_fid )
         size_t j = 1;
         if ( i == 0 )
         {
-            j = 0; // Only inlclude airfoils at start and end of XSec for first XSec
+            j = 0; // Only include airfoils at start and end of XSec for first XSec
         }
 
         for ( /* j */; j < utess_vec[i]; j++ )
@@ -4490,12 +4536,12 @@ void Geom::WritePovRayTri( FILE* fid, const vec3d& v, const vec3d& n, bool comma
 }
 
 //==== Create TMesh Vector ====//
-vector< TMesh* > Geom::CreateTMeshVec()
+vector< TMesh* > Geom::CreateTMeshVec() const
 {
     return CreateTMeshVec( m_SurfVec );
 }
 
-vector< TMesh* > Geom::CreateTMeshVec( vector<VspSurf> &surf_vec )
+vector< TMesh* > Geom::CreateTMeshVec( const vector<VspSurf> &surf_vec ) const
 {
     vector< TMesh* > TMeshVec;
     vector< vector<vec3d> > pnts;
@@ -4513,7 +4559,7 @@ vector< TMesh* > Geom::CreateTMeshVec( vector<VspSurf> &surf_vec )
         {
             if ( m_SurfIndxVec[i] == m_SurfIndxVec[j] )
             {
-                surf_vec[i].FlagDuplicate( &surf_vec[j] );
+                surf_vec[i].FlagDuplicate( surf_vec[j] );
             }
         }
     }
@@ -4885,7 +4931,7 @@ void Geom::AppendWakeData( vector < piecewise_curve_type >& curve_vec, vector < 
     if( m_WakeActiveFlag() )
     {
         vector<VspSurf> surf_vec;
-        GetSurfVec( surf_vec );
+        surf_vec = GetSurfVecConstRef();
 
         for( int i = 0; i < GetNumTotalSurfs(); i++ )
         {
@@ -4986,6 +5032,17 @@ void GeomXSec::UpdateDrawObj()
         }
         m_XSecDrawObj_vec[i].m_GeomChanged = true;
     }
+}
+
+void GeomXSec::UpdateHighlightDrawObj()
+{
+    Matrix4d attachMat;
+    Matrix4d relTrans;
+    attachMat = ComposeAttachMatrix();
+    relTrans = attachMat;
+    relTrans.affineInverse();
+    relTrans.matMult( m_ModelMatrix.data() );
+    relTrans.postMult( attachMat.data() );
 
     XSec* axs = m_XSecSurf.FindXSec( m_ActiveXSec() );
     if ( axs )
@@ -5132,6 +5189,26 @@ void GeomXSec::AddDefaultSourcesXSec( double base_len, double len_ref, int ixsec
             }
         }
     }
+}
+
+//==== Set Active XSec Type ====//
+void GeomXSec::SetActiveXSecType(int type)
+{
+    XSec* xs = GetXSec(m_ActiveXSec());
+
+    if (!xs)
+    {
+        return;
+    }
+
+    if (type == xs->GetXSecCurve()->GetType())
+    {
+        return;
+    }
+
+    m_XSecSurf.ChangeXSecShape(m_ActiveXSec(), type);
+
+    Update();
 }
 
 void GeomXSec::OffsetXSecs( double off )

@@ -491,7 +491,7 @@ int ParasiteDragMgrSingleton::CalcRowSize()
                     ++m_RowSize;
                 }
 
-                // Subsurfaces are essentially seperate geometries and as such get their own master row
+                // Subsurfaces are essentially separate geometries and as such get their own master row
                 if ( geom->GetSubSurfVec()[j]->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
                 {
                     ++m_RowSize;
@@ -567,26 +567,23 @@ void ParasiteDragMgrSingleton::Calculate_Lref()
 {
     // Initialize Variablse
     int iSurf = 0;
-    string lastID;
 
     for ( int i = 0; i < m_RowSize; ++i )
     {
         if ( !m_DegenGeomVec.empty() )
         {
             Geom* geom = VehicleMgr.GetVehicle()->FindGeom(m_geo_geomID[i]);
-            // If DegenGeom Exists Calculate Lref
-            if ( m_geo_masterRow[i] )
+            if ( geom )
             {
-                if ( m_geo_subsurfID[i].compare( "" ) == 0 )
+                // If DegenGeom Exists Calculate Lref
+                if ( m_geo_masterRow[i] )
                 {
-                    if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
+                    if ( m_geo_subsurfID[i].compare( "" ) == 0 )
                     {
-                        m_geo_lref.push_back( CalcReferenceLength( iSurf ) );
-
-                        lastID = m_geo_geomID[i];
-
-                        if (geom)
+                        if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
                         {
+                            m_geo_lref.push_back( CalcReferenceLength( iSurf ) );
+
                             if (geom->GetType().m_Type != PROP_GEOM_TYPE)
                             {
                                 iSurf += geom->GetNumSymmCopies();
@@ -601,24 +598,26 @@ void ParasiteDragMgrSingleton::Calculate_Lref()
                                 }
                             }
                         }
+                        else
+                        {
+                            --i;
+                            iSurf += geom->GetNumSymmCopies();
+                        }
                     }
                     else
                     {
-                        --i;
-                        
-                        if ( geom ) iSurf += geom->GetNumSymmCopies();
-                        
+                        m_geo_lref.push_back( CalcReferenceLength( iSurf - 1 ) );
                     }
                 }
                 else
                 {
-                    m_geo_lref.push_back( CalcReferenceLength( iSurf - 1 ) );
-                    lastID = m_geo_geomID[i];
+                    m_geo_lref.push_back( m_geo_lref[m_geo_lref.size() - 1] );
                 }
             }
             else
             {
-                m_geo_lref.push_back( m_geo_lref[m_geo_lref.size() - 1] );
+                // Else Push Back Default Val
+                m_geo_lref.push_back( -1 );
             }
         }
         else
@@ -842,35 +841,67 @@ double ParasiteDragMgrSingleton::CalcPartialTurbulence( double perclam, double r
 
 void ParasiteDragMgrSingleton::Calculate_fineRat_and_toc()
 {
+    Vehicle* veh = VehicleMgr.GetVehicle();
+    char str[256];
+    string newstr;
+    int searchIndex;
+
+    if ( !veh )
+    {
+        return;
+    }
+
     int iSurf = 0;
 
     for ( int i = 0; i < m_RowSize; ++i )
     {
         if ( !m_DegenGeomVec.empty() )
         {
-            // If DegenGeom Exists Calculate Fineness Ratio
-            if ( m_geo_masterRow[i] )
+            Geom* geom = veh->FindGeom( m_geo_geomID[i] );
+            if (geom)
             {
-                if ( m_geo_subsurfID[i].compare( "" ) == 0 )
+                // If DegenGeom Exists Calculate Fineness Ratio
+                if ( m_geo_masterRow[i] )
                 {
-                    if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
+                    if ( m_geo_subsurfID[i].compare( "" ) == 0 )
                     {
-                        m_geo_fineRat_or_toc.push_back( CalculateFinessRatioAndTOC( iSurf, i) );
+                        if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
+                        {
+                            m_geo_fineRat_or_toc.push_back( CalculateFinessRatioAndTOC( iSurf, i) );
+
+                            if ( geom->GetType().m_Type != PROP_GEOM_TYPE )
+                            {
+                                iSurf += geom->GetNumSymmCopies();
+                            }
+                            else
+                            {
+                                string numBladesID = geom->FindParm( "NumBlade", "Design" );
+                                IntParm* tNumBladeParm = (IntParm*) ParmMgr.FindParm( numBladesID );
+                                if ( tNumBladeParm )
+                                {
+                                    iSurf += tNumBladeParm->Get() * geom->GetNumSymmCopies();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            --i;
+                            iSurf += geom->GetNumSymmCopies();
+                        }
                     }
                     else
                     {
-                        --i;
+                        m_geo_fineRat_or_toc.push_back( CalculateFinessRatioAndTOC( iSurf - 1, i) );
                     }
-                    iSurf += VehicleMgr.GetVehicle()->FindGeom( m_geo_geomID[i] )->GetNumSymmCopies();
                 }
                 else
                 {
-                    m_geo_fineRat_or_toc.push_back( CalculateFinessRatioAndTOC( iSurf - 1, i) );
+                    m_geo_fineRat_or_toc.push_back( m_geo_fineRat_or_toc[m_geo_fineRat_or_toc.size() - 1] );
                 }
             }
             else
             {
-                m_geo_fineRat_or_toc.push_back( m_geo_fineRat_or_toc[m_geo_fineRat_or_toc.size() - 1] );
+                m_geo_fineRat_or_toc.push_back( -1 );
             }
         }
         else
@@ -941,7 +972,24 @@ void ParasiteDragMgrSingleton::Calculate_FF()
                     {
                         --i;
                     }
-                    iSurf += VehicleMgr.GetVehicle()->FindGeom( m_geo_geomID[i] )->GetNumSymmCopies();
+
+                    Geom* geom = VehicleMgr.GetVehicle()->FindGeom( m_geo_geomID[i] );
+                    if (geom)
+                    {
+                        if ( geom->GetType().m_Type != PROP_GEOM_TYPE )
+                        {
+                            iSurf += geom->GetNumSymmCopies();
+                        }
+                        else
+                        {
+                            string numBladesID = geom->FindParm( "NumBlade", "Design" );
+                            IntParm* tNumBladeParm = (IntParm*) ParmMgr.FindParm( numBladesID );
+                            if ( tNumBladeParm )
+                            {
+                                iSurf += tNumBladeParm->Get() * geom->GetNumSymmCopies();
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -980,7 +1028,6 @@ double ParasiteDragMgrSingleton::CalculateFormFactor( int isurf, int irow )
     // Initialize Variables
     vector<double>::const_iterator it;
     double toc;
-    double longF, FR, Area;
     vector <double> hVec, wVec;
     double formfactor = 1.0;
 
@@ -2114,7 +2161,7 @@ double ParasiteDragMgrSingleton::GetGeometryCD()
     double sum = 0;
     for ( int i = 0; i < m_geo_CD.size(); i++ )
     {
-        if ( !m_geo_masterRow[i] )
+        if ( m_geo_masterRow[i] )
         {
             if ( m_geo_CD[i] > 0.0 )
             {
@@ -3689,7 +3736,7 @@ bool ParasiteDragMgrSingleton::IsSameGeomSet()
                     ++temprowsize;
                 }
 
-                // Subsurfaces are essentially seperate geometries and as such get their own master row
+                // Subsurfaces are essentially separate geometries and as such get their own master row
                 if ( geom->GetSubSurfVec()[j]->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
                 {
                     ++temprowsize;
@@ -3745,7 +3792,7 @@ bool ParasiteDragMgrSingleton::IsNotZeroLineItem( int index )
     // OR
     // Sub surface is NOT Zero Drag
 
-    // If incorporated, swet is added to choosen ancestor
+    // If incorporated, swet is added to chosen ancestor
     // Main surf will never be a zero line item
     // Custom types can have several geom types in them
     // If Geom list is expanded all components use their individual swets

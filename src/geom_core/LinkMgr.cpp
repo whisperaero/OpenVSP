@@ -23,7 +23,7 @@ LinkMgrSingleton::LinkMgrSingleton()
     m_NumPredefinedUserParms = 16;
     m_UserParms.SetNumPredefined( m_NumPredefinedUserParms );
     m_UserParms.Renew(m_NumPredefinedUserParms);
-
+    m_FreezeUpdateFlag = false;
 }
 
 void LinkMgrSingleton::Init()
@@ -389,6 +389,9 @@ void LinkMgrSingleton::ParmChanged( const string& pid, bool start_flag  )
     if ( !parm_ptr )
         return;
 
+    if ( m_FreezeUpdateFlag )
+        return;
+
     //==== Check For Advanced Links ====//
     bool adv_link_flag = AdvLinkMgr.IsInputParm( pid );
 
@@ -569,13 +572,19 @@ void LinkMgrSingleton::BuildLinkableParmData()
             pc->AddLinkableContainers( m_LinkableContainers );
         }
     }
+
+    ParmMgr.SetDirtyFlag( false );
 }
 
 //==== Get Container Name Vec And Find Match Index For Parm_ID ====//
 int LinkMgrSingleton::GetCurrContainerVec( const string& parm_id, vector< string > & idVec )
 {
     int index = 0;
-    BuildLinkableParmData();
+
+    if ( ParmMgr.GetDirtyFlag() )
+    {
+        BuildLinkableParmData();
+    }
 
     //==== Find Container ID ====//
     string curr_container_id;
@@ -611,7 +620,10 @@ int LinkMgrSingleton::GetCurrContainerVec( const string& parm_id, vector< string
 int LinkMgrSingleton::GetCurrGroupNameVec( const string& parm_id, vector< string > & nameVec )
 {
     int index = 0;
-    BuildLinkableParmData();
+    if ( ParmMgr.GetDirtyFlag() )
+    {
+        LinkMgr.BuildLinkableParmData();
+    }
 
     if ( m_LinkableContainers.size() == 0 )
     {
@@ -635,7 +647,10 @@ int LinkMgrSingleton::GetCurrGroupNameVec( const string& parm_id, vector< string
 int LinkMgrSingleton::GetCurrParmIDVec( const string& parm_id, vector< string > & idVec )
 {
     int index = 0;
-    BuildLinkableParmData();
+    if ( ParmMgr.GetDirtyFlag() )
+    {
+        LinkMgr.BuildLinkableParmData();
+    }
 
     if ( m_LinkableContainers.size() == 0 )
     {

@@ -106,6 +106,13 @@ public:
     void zoom( int px, int py, int cx, int cy );
 
     /*!
+    * Zoom in or out.
+    *
+    * dx, dy - mouse scroll change.
+    */
+    void zoom( int dx, int dy );
+
+    /*!
     * Zoom in or out relative to a point in world space.
     *
     * zoomvalue - amount to zoom in or out.  Positive zooms out,
@@ -135,7 +142,7 @@ public:
     *
     * index - index of the save.  Index is zero based, for now, only
     * limit to four save slots.  If index is already used, its
-    * content will be overwrited with new camera system.
+    * content will be overwritten with new camera system.
     */
     virtual void save( int index );
 

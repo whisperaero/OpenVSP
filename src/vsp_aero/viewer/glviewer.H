@@ -27,6 +27,18 @@
 #include <FL/Fl_Button.H>
 #include <FL/forms.H>
 
+#ifdef __APPLE__
+
+//#include <OpenGL/glu.h>
+//#include <GLUT/glut.h>
+
+#else
+
+//#include <GL/glu.h>
+//#include <GL/glut.h>
+
+#endif
+
 #include "trackball.H"
 #include "utils.H"
 #include "glf.H"
@@ -40,6 +52,9 @@
 #include "ControlSurface.H"
 #include "VSP_DegenGeom.H"
 #include "FEM_Node.H"
+#include "Optimization_Node.H"
+
+#include "stb_image_write.h"
 
 //  Define marked tri types
 
@@ -209,6 +224,8 @@ private:
     SOLUTION_CASE *ADBCaseList_;
 
     char file_name[2000];
+    char file_name_no_path[2000];
+    char path[200];
 
     float Sref;
     float Cref;
@@ -299,6 +316,12 @@ private:
     FEM_NODE *FemData_;
     FEM_NODE &FemData(int i) { return FemData_[i]; };
     
+    // Adjoint data
+    
+    OPT_NODE OptimizationData_;
+    
+    void LoadAdjointandGradients(void);
+
     // Adjust center of geometry for better rotations
 
     float GeometryXShift;
@@ -532,9 +555,9 @@ private:
 
     fpos_t StartOfWallTemperatureData;
 
-    // Write out a tiff file
+    // Write out a png file
 
-    int WriteTiff(char *filename, char *description,
+    int WritePNG(char *filename, char *description,
                   int x, int y, int width, int height, int compression);
 
 public:
@@ -581,9 +604,10 @@ public:
 
     void RunScript(char *ScriptName, viewerUI *vui);
 
-    // Write out a tiff file
+    // Write out a png file
 
-    void WriteTiffFile(char *FileName);
+    void WritePNGFile(char *FileName);
+    void WritePNGFile(char *Path, char *FileName);
 
     void WriteMovieFrame(char *FileName);
 
@@ -784,7 +808,7 @@ public:
     
     // Make a movie
     
-    void MakeMovie(void);
+    void MakeMovie(char *FileName);
     
     // Draw wakes colored
     

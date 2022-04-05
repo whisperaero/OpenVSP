@@ -21,7 +21,7 @@
 //              Match SCurves to create ICurves.  Create wakes surfs.
 //
 //  Intersect: Intersect all surfaces.  Intersect Y Slice Plane.
-//      Surf::Intersect - subdivide in to patchs, keep splitting till planer, intersect.
+//      Surf::Intersect - subdivide in to patches, keep splitting till planer, intersect.
 //          CfdMeshMgr::AddIntersectionSeg - Create intersection points and segments.
 //
 //      CfdMeshMgr::LoadBorderCurves: Tesselate border curves, build border chains.
@@ -208,7 +208,7 @@ public:
     ~SurfaceIntersectionSingleton() override;
     virtual void CleanUp();
 
-    void RegisterAnalysis();
+    virtual void RegisterAnalysis();
 
     virtual void IntersectSurfaces();
 
@@ -245,6 +245,8 @@ public:
     virtual void ExportFiles();
     //virtual void CheckDupOrAdd( Node* node, vector< Node* > & nodeVec );
 
+    virtual Surf* FindSurf( int surf_id ); // Find surface given surf ID
+
     virtual void DeleteDuplicateSurfs();
     virtual void BuildGrid();
 
@@ -257,7 +259,12 @@ public:
 //  virtual ISeg* CreateSurfaceSeg( Surf* sPtr, vec3d & p0, vec3d & p1, vec2d & uw0, vec2d & uw1 );
     virtual ISeg* CreateSurfaceSeg( Surf* surfA, vec2d & uwA0, vec2d & uwA1, Surf* surfB, vec2d & uwB0, vec2d & uwB1  );
 
+    virtual void WriteISegs();
     virtual void BuildChains();
+
+    void RefineISegChainSeg( ISegChain* c, IPnt* ipnt );
+    void RefineISegChain( ISegChain* c );
+
     virtual void ExpandChain( ISegChain* chain, PNTree* PN_tree );
 
     virtual void BuildCurves();
@@ -356,7 +363,7 @@ protected:
 
     // Convert each ISegChain into a NURBS curve. The curves are labeled as border 
     // curves or intersection curves. For border curves, a test is performed to 
-    // detemine if they are outside or inside another surface.
+    // determine if they are outside or inside another surface.
     void BuildNURBSCurvesVec();
 
     // Function to get all groups of component IDs. Components that are joined by intersection

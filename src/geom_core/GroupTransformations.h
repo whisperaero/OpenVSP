@@ -26,13 +26,13 @@ public:
     // Destructor
     virtual ~GroupTransformations();
 
-    // Custom handling of what to do when a paramter has changed
+    // Custom handling of what to do when a parameter has changed
     virtual void ParmChanged( Parm * parm, int type );
 
     // Method to update
     virtual void Update();
 
-    // Method used reset the transformations in prepartion for operating on a new group
+    // Method used reset the transformations in preparation for operating on a new group
     virtual void ReInitialize();
 
     // Resets all values
@@ -40,9 +40,6 @@ public:
 
     // Accepts all values
     virtual void Accept();
-
-    // Initialization function
-    virtual void Init( Vehicle* vehicle );
 
     // Getters and setters
     virtual vec3d GetColor() { return m_GroupColor; }
@@ -66,13 +63,10 @@ public:
 
 protected:
     // Helper method that will set all the parameters back to default values
-    virtual void ResetParmeters();
+    virtual void ResetParameters();
 
     // Stores original group variable values
     vector< vector< double > > m_oldVarVals;
-
-    // Pointer back to the vehicle that owns this class
-    Vehicle* m_Vehicle;
 
     // Material properties
     Material m_GroupMaterial;

@@ -147,10 +147,36 @@ BORScreen::BORScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 300, 680, "BOR" )
     m_RoundedRectGroup.AddSlider( m_RRWidthSlider,  "Width", 10, "%6.5f" );
     m_RoundedRectGroup.AddYGap();
     m_RoundedRectGroup.AddSlider( m_RRSkewSlider, "Skew", 2, "%6.5f");
+    m_RoundedRectGroup.AddSlider( m_RRVSkewSlider, "VSkew", 2, "%6.5f" );
     m_RoundedRectGroup.AddSlider( m_RRKeystoneSlider, "Keystone", 1, "%6.5f");
+
     m_RoundedRectGroup.AddYGap();
-    m_RoundedRectGroup.AddSlider( m_RRRadiusSlider, "Radius", 10, "%6.5f" );
+    m_RoundedRectGroup.SetSameLineFlag( true );
+    m_RoundedRectGroup.SetFitWidthFlag( false );
+    m_RoundedRectGroup.SetButtonWidth( m_RoundedRectGroup.GetRemainX() / 5 );
+
+    m_RoundedRectGroup.AddLabel( "Symmetry:", m_RoundedRectGroup.GetRemainX() / 5 );
+    m_RoundedRectGroup.AddButton( m_RRRadNoSymToggle, "None" );
+    m_RoundedRectGroup.AddButton( m_RRRadRLSymToggle, "R//L" );
+    m_RoundedRectGroup.AddButton( m_RRRadTBSymToggle, "T//B" );
+    m_RoundedRectGroup.AddButton( m_RRRadAllSymToggle, "All" );
+
+    m_RRRadSymRadioGroup.Init( this );
+    m_RRRadSymRadioGroup.AddButton( m_RRRadNoSymToggle.GetFlButton() );
+    m_RRRadSymRadioGroup.AddButton( m_RRRadRLSymToggle.GetFlButton() );
+    m_RRRadSymRadioGroup.AddButton( m_RRRadTBSymToggle.GetFlButton() );
+    m_RRRadSymRadioGroup.AddButton( m_RRRadAllSymToggle.GetFlButton() );
+
+    m_RoundedRectGroup.ForceNewLine();
+    m_RoundedRectGroup.SetSameLineFlag( false );
+    m_RoundedRectGroup.SetFitWidthFlag( true );
+
+    m_RoundedRectGroup.AddSlider( m_RRRadiusTRSlider, "TR Radius", 10, "%6.5f" );
+    m_RoundedRectGroup.AddSlider( m_RRRadiusTLSlider, "TL Radius", 10, "%6.5f" );
+    m_RoundedRectGroup.AddSlider( m_RRRadiusBLSlider, "BL Radius", 10, "%6.5f" );
+    m_RoundedRectGroup.AddSlider( m_RRRadiusBRSlider, "BR Radius", 10, "%6.5f" );
     m_RoundedRectGroup.AddYGap();
+
     m_RoundedRectGroup.AddButton( m_RRKeyCornerButton, "Key Corner" );
 
     //==== General Fuse XSec ====//
@@ -283,6 +309,8 @@ BORScreen::BORScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 300, 680, "BOR" )
     m_WedgeGroup.AddSlider( m_WedgeUForeLowSlider, "U Fwd Low", 1, "%7.5f" );
     m_WedgeGroup.AddSlider( m_WedgeDuUpSlider, "dU Flat Up", 1, "%7.5f" );
     m_WedgeGroup.AddSlider( m_WedgeDuLowSlider, "dU Flat Low", 1, "%7.5f" );
+    m_WedgeGroup.AddYGap();
+    m_WedgeGroup.AddButton( m_WedgeInvertButton, "Invert Airfoil" );
 
     //==== Fuse File ====//
     m_XSecLayout.AddSubGroupLayout( m_FuseFileGroup, m_XSecLayout.GetW(), m_XSecLayout.GetRemainY() );
@@ -313,6 +341,9 @@ BORScreen::BORScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 300, 680, "BOR" )
 
     //==== CST Airfoil ====//
     m_XSecLayout.AddSubGroupLayout( m_CSTAirfoilGroup, m_XSecLayout.GetW(), m_XSecLayout.GetRemainY() );
+
+    m_CSTAirfoilGroup.AddOutput( m_CSTThickChordOutput, "T/C", "%7.5f" );
+
     m_CSTAirfoilGroup.AddButton( m_CSTContLERadButton, "Enforce Continuous LE Radius" );
     m_CSTAirfoilGroup.AddButton( m_CSTInvertButton, "Invert Airfoil" );
 
@@ -370,6 +401,7 @@ BORScreen::BORScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 300, 680, "BOR" )
     m_VKTGroup.AddSlider( m_VKTEpsilonSlider, "Epsilon", 1, "%7.5f" );
     m_VKTGroup.AddSlider( m_VKTKappaSlider, "Kappa", 1, "%7.5f" );
     m_VKTGroup.AddSlider( m_VKTTauSlider, "Tau", 10, "%7.5f" );
+    m_VKTGroup.AddOutput( m_VKTThickChordOutput, "T/C", "%7.5f" );
     m_VKTGroup.AddYGap();
     m_VKTGroup.AddButton( m_VKTInvertButton, "Invert Airfoil" );
     m_VKTGroup.AddYGap();
@@ -804,10 +836,40 @@ bool BORScreen::Update()
 
             m_RRHeightSlider.Update( rect_xs->m_Height.GetID() );
             m_RRWidthSlider.Update( rect_xs->m_Width.GetID() );
-            m_RRRadiusSlider.Update( rect_xs->m_Radius.GetID() );
+            m_RRRadSymRadioGroup.Update( rect_xs->m_RadiusSymmetryType.GetID() );
+            m_RRRadiusBRSlider.Update( rect_xs->m_RadiusBR.GetID() );
+            m_RRRadiusBLSlider.Update( rect_xs->m_RadiusBL.GetID() );
+            m_RRRadiusTLSlider.Update( rect_xs->m_RadiusTL.GetID() );
+            m_RRRadiusTRSlider.Update( rect_xs->m_RadiusTR.GetID() );
             m_RRKeyCornerButton.Update( rect_xs->m_KeyCornerParm.GetID() );
             m_RRSkewSlider.Update( rect_xs->m_Skew.GetID() );
             m_RRKeystoneSlider.Update( rect_xs->m_Keystone.GetID() );
+            m_RRVSkewSlider.Update( rect_xs->m_VSkew.GetID() );
+
+            if ( rect_xs->m_RadiusSymmetryType.Get() == vsp::SYM_NONE )
+            {
+                m_RRRadiusBRSlider.Activate();
+                m_RRRadiusBLSlider.Activate();
+                m_RRRadiusTLSlider.Activate();
+            }
+            else if ( rect_xs->m_RadiusSymmetryType.Get() == vsp::SYM_RL )
+            {
+                m_RRRadiusBRSlider.Activate();
+                m_RRRadiusBLSlider.Deactivate();
+                m_RRRadiusTLSlider.Deactivate();
+            }
+            else if ( rect_xs->m_RadiusSymmetryType.Get() == vsp::SYM_TB )
+            {
+                m_RRRadiusBRSlider.Deactivate();
+                m_RRRadiusTLSlider.Activate();
+                m_RRRadiusBLSlider.Deactivate();
+            }
+            else if ( rect_xs->m_RadiusSymmetryType.Get() == vsp::SYM_ALL )
+            {
+                m_RRRadiusBRSlider.Deactivate();
+                m_RRRadiusBLSlider.Deactivate();
+                m_RRRadiusTLSlider.Deactivate();
+            }
         }
         else if ( xsc->GetType() == vsp::XS_GENERAL_FUSE )
         {
@@ -896,6 +958,7 @@ bool BORScreen::Update()
             m_WedgeUForeLowSlider.Update( we_xs->m_UForeLow.GetID() );
             m_WedgeDuUpSlider.Update( we_xs->m_DuUp.GetID() );
             m_WedgeDuLowSlider.Update( we_xs->m_DuLow.GetID() );
+            m_WedgeInvertButton.Update( we_xs->m_Invert.GetID() );
 
             if ( we_xs->m_SymmThick() )
             {
@@ -942,6 +1005,7 @@ bool BORScreen::Update()
             m_CSTChordSlider.Update(cst_xs->m_Chord.GetID());
             m_CSTInvertButton.Update( cst_xs->m_Invert.GetID() );
             m_CSTContLERadButton.Update( cst_xs->m_ContLERad.GetID() );
+            m_CSTThickChordOutput.Update( cst_xs->m_ThickChord.GetID() );
 
             if ( ( m_UpCoeffSliderVec.size() != num_up ) || ( m_LowCoeffSliderVec.size() != num_low ) )
             {
@@ -983,6 +1047,7 @@ bool BORScreen::Update()
             m_VKTTauSlider.Update( vkt_xs->m_Tau.GetID() );
             m_VKTInvertButton.Update( vkt_xs->m_Invert.GetID() );
             m_VKTDegreeCounter.Update( vkt_xs->m_FitDegree.GetID() );
+            m_VKTThickChordOutput.Update( vkt_xs->m_ThickChord.GetID() );
         }
         else if ( xsc->GetType() == vsp::XS_FOUR_DIGIT_MOD )
         {

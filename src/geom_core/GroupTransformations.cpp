@@ -10,18 +10,15 @@
 // ==== Constructor ==== //
 GroupTransformations::GroupTransformations()
 {
-    // Initialize the vehicle pointer to null
-    m_Vehicle = NULL;
-
-    // Initialize paramters
-    m_GroupXLoc.Init( "Group_XLoc", "Group", this, 0, -1e12, 1e12 );
-    m_GroupYLoc.Init( "Group_YLoc", "Group", this, 0, -1e12, 1e12 );
-    m_GroupZLoc.Init( "Group_ZLoc", "Group", this, 0, -1e12, 1e12 );
-    m_GroupXRot.Init( "Group_XRot", "Group", this, 0, -360.0, 360.0 );
-    m_GroupYRot.Init( "Group_YRot", "Group", this, 0, -360.0, 360.0 );
-    m_GroupZRot.Init( "Group_ZRot", "Group", this, 0, -360.0, 360.0 );
-    m_GroupScale.Init( "Group_Scale", "Group", this, 1, 1.0e-3, 1.0e3 );
-    m_scaleGroupTranslations.Init( "ScaleGroupTranslations", "Group", this, true, false, true );
+    // Initialize parameters
+    m_GroupXLoc.Init( "Group_XLoc", "GroupXForm", this, 0, -1e12, 1e12 );
+    m_GroupYLoc.Init( "Group_YLoc", "GroupXForm", this, 0, -1e12, 1e12 );
+    m_GroupZLoc.Init( "Group_ZLoc", "GroupXForm", this, 0, -1e12, 1e12 );
+    m_GroupXRot.Init( "Group_XRot", "GroupXForm", this, 0, -360.0, 360.0 );
+    m_GroupYRot.Init( "Group_YRot", "GroupXForm", this, 0, -360.0, 360.0 );
+    m_GroupZRot.Init( "Group_ZRot", "GroupXForm", this, 0, -360.0, 360.0 );
+    m_GroupScale.Init( "Group_Scale", "GroupXForm", this, 1, 1.0e-3, 1.0e3 );
+    m_scaleGroupTranslations.Init( "ScaleGroupTranslations", "GroupXForm", this, true, false, true );
 
     // Initialize Material and Color
     m_GroupMaterial.SetMaterialToDefault();
@@ -32,15 +29,7 @@ GroupTransformations::~GroupTransformations()
 {
 }
 
-// ==== Initialization function which should be called ====//
-// ==== before using a GroupTransformations object     ====//
-void GroupTransformations::Init( Vehicle * vehicle )
-{
-    assert( vehicle );
-    m_Vehicle = vehicle;
-}
-
-// ==== Handle a changed paramter ==== //
+// ==== Handle a changed parameter ==== //
 void GroupTransformations::ParmChanged( Parm * parm, int type )
 {
     // Check if this was not set from a device
@@ -54,17 +43,20 @@ void GroupTransformations::ParmChanged( Parm * parm, int type )
     Update();
 
     // Let vehicle know about the change
-    m_Vehicle->ParmChanged( parm, type );
+    Vehicle* veh = VehicleMgr.GetVehicle();
+
+    veh->ParmChanged( parm, type );
 }
 
-// ==== Applys transformations to active geoms ==== //
+// ==== Applies transformations to active geoms ==== //
 void GroupTransformations::Update()
 {
     // Turn off the late update flag
     m_LateUpdateFlag = false;
 
+    Vehicle* veh = VehicleMgr.GetVehicle();
     // Get the active Geoms
-    vector< string > activeGroup = m_Vehicle->GetActiveGeomVec();
+    vector< string > activeGroup = veh->GetActiveGeomVec();
 
     // m_oldVarVals should have the same number of rows as there are
     // active geoms
@@ -72,7 +64,7 @@ void GroupTransformations::Update()
 
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* thisGeom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* thisGeom = veh->FindGeom( activeGroup[i] );
         string parent_id = thisGeom->GetParentID();
 
         // Set the geom to ignore the abs/rel flag because
@@ -106,7 +98,7 @@ void GroupTransformations::Update()
         }
 
         // Only apply rotation if either the geom has no active parent or its
-        // rotation coordinate system is not relative to another geometry's rotational coordiante system
+        // rotation coordinate system is not relative to another geometry's rotational coordinate system
         if ( !parent_in_group || ( thisGeom->m_RotAttachFlag.Get() == vsp::ATTACH_ROT_NONE && !thisGeom->IsParentJoint() ))
         {
             delta_xrot = m_GroupXRot.Get();
@@ -114,7 +106,7 @@ void GroupTransformations::Update()
             delta_zrot = m_GroupZRot.Get();
         }
 
-        // Apply the deltas to stored orignal x,y,z
+        // Apply the deltas to stored original x,y,z
         new_x = m_oldVarVals[i][0] + delta_x;
         new_y = m_oldVarVals[i][1] + delta_y;
         new_z = m_oldVarVals[i][2] + delta_z;
@@ -151,7 +143,7 @@ void GroupTransformations::Update()
     // Only update geoms that do not have parent's in the group
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* thisGeom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* thisGeom = veh->FindGeom( activeGroup[i] );
         string parent_id = thisGeom->GetParentID();
 
         bool parent_in_group = std::find( activeGroup.begin(), activeGroup.end(), parent_id ) != activeGroup.end();
@@ -164,7 +156,7 @@ void GroupTransformations::Update()
     // to restore normal transformation behavior
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* thisGeom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* thisGeom = veh->FindGeom( activeGroup[i] );
         thisGeom->SetIgnoreAbsFlag( false );
     }
 }
@@ -172,12 +164,13 @@ void GroupTransformations::Update()
 // ====  Method to store the current transformation values of the active geoms ==== //
 void GroupTransformations::ReInitialize()
 {
-    vector< string > activeGroup = m_Vehicle->GetActiveGeomVec();
+    Vehicle* veh = VehicleMgr.GetVehicle();
+    vector< string > activeGroup = veh->GetActiveGeomVec();
     m_oldVarVals.resize( activeGroup.size() );
 
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* geom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* geom = veh->FindGeom( activeGroup[i] );
         m_oldVarVals[i].resize( 7 ); // 3 * translate + 3 * rotate + 1 * scale
 
         m_oldVarVals[i][0] = geom->m_XRelLoc.Get();
@@ -189,7 +182,7 @@ void GroupTransformations::ReInitialize()
         m_oldVarVals[i][6] = geom->m_Scale.Get();
     }
 
-    ResetParmeters();
+    ResetParameters();
 
     // Set Material and Color to defaults
     m_GroupMaterial.SetMaterialToDefault();
@@ -202,7 +195,7 @@ void GroupTransformations::ReInitialize()
 // ==== Calls the reset scale method on all active geoms ==== //
 void GroupTransformations::Reset()
 {
-    ResetParmeters();
+    ResetParameters();
 
     // Update the active geoms with the new values
     Update();
@@ -211,15 +204,16 @@ void GroupTransformations::Reset()
 // ==== Calls the accept scale method on all active geoms === //
 void GroupTransformations::Accept()
 {
+    Vehicle* veh = VehicleMgr.GetVehicle();
     // Get the active geoms
-    vector< string > activeGroup = m_Vehicle->GetActiveGeomVec();
+    vector< string > activeGroup = veh->GetActiveGeomVec();
 
     // m_oldVarVals should be the same size as the activeGroup
     assert( m_oldVarVals.size() == activeGroup.size() );
 
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* thisGeom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* thisGeom = veh->FindGeom( activeGroup[i] );
         thisGeom->AcceptScale();
 
         m_oldVarVals[i][0] = thisGeom->m_XRelLoc.Get();
@@ -231,13 +225,13 @@ void GroupTransformations::Accept()
         m_oldVarVals[i][6] = thisGeom->m_Scale.Get();
     }
 
-    ResetParmeters();
+    ResetParameters();
 
     m_LateUpdateFlag = false;
 }
 
 // ==== Helper method that will set all the parameters back to default values ==== //
-void GroupTransformations::ResetParmeters()
+void GroupTransformations::ResetParameters()
 {
     // Set the values
     m_GroupXLoc.Set( 0 );
@@ -252,14 +246,16 @@ void GroupTransformations::ResetParmeters()
 // ==== Sets all of the active Geom's material to the specified material
 void GroupTransformations::SetMaterial( const Material & material )
 {
+    Vehicle* veh = VehicleMgr.GetVehicle();
+
     // Set the group material to the input material
     m_GroupMaterial = Material( material );
 
     // Get the active geoms
-    vector< string > activeGroup = m_Vehicle->GetActiveGeomVec();
+    vector< string > activeGroup = veh->GetActiveGeomVec();
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* geom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* geom = veh->FindGeom( activeGroup[i] );
 
         // Assign the material values to each geom
         geom->SetMaterial( m_GroupMaterial.m_Name, m_GroupMaterial.m_Ambi,
@@ -271,14 +267,16 @@ void GroupTransformations::SetMaterial( const Material & material )
 // === Sets all of the active Geom's color to the specified color
 void GroupTransformations::SetColor( const vec3d & color )
 {
+    Vehicle* veh = VehicleMgr.GetVehicle();
+
     // Store the group color
     m_GroupColor = vec3d( color );
 
     // Get the active geoms
-    vector< string > activeGroup = m_Vehicle->GetActiveGeomVec();
+    vector< string > activeGroup = veh->GetActiveGeomVec();
     for ( int i = 0; i < activeGroup.size(); i++ )
     {
-        Geom* geom = m_Vehicle->FindGeom( activeGroup[i] );
+        Geom* geom = veh->FindGeom( activeGroup[i] );
 
         // Set the geom's color
         geom->SetColor( color.x(), color.y(), color.z() );

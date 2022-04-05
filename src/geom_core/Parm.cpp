@@ -13,6 +13,8 @@
 #include <cfloat>
 
 #include "Combination.h"
+#include "StlHelper.h"
+#include "VspUtil.h"
 
 using std::string;
 
@@ -30,7 +32,6 @@ Parm::Parm()
     m_UpperLimit =  1.0e16;
     m_LowerLimit = -1.0e16;
     m_ActiveFlag = true;
-    m_LinkedFlag = false;
     m_LinkUpdateFlag = false;
     m_ChangeCnt = 0;
 }
@@ -116,7 +117,7 @@ string Parm::GetDisplayGroupName()
     return displayName;
 }
 
-//==== Set Val And Check Limts ====//
+//==== Set Val And Check Limits ====//
 bool Parm::SetValCheckLimits( double val )
 {
     //==== Check If Val Has Changed ====//
@@ -239,7 +240,7 @@ void Parm::SetLowerUpperLimits( double lower_limit, double upper_limit )
 //==== Generate Unique ID ====//
 string Parm::GenerateID()
 {
-    return ParmMgr.GenerateID( 11 );
+    return GenerateRandomID( 11 );
 }
 
 string Parm::GetContainerID()
@@ -351,7 +352,7 @@ int IntParm::Set( int val )
     return ( int )( m_Val + 0.5 );
 }
 
-//==== Set Val And Check Limts ====//
+//==== Set Val And Check Limits ====//
 bool IntParm::SetValCheckLimits( double val )
 {
     //==== Check If Val Has Changed ====//
@@ -394,7 +395,7 @@ LimIntParm::LimIntParm() : IntParm()
     m_Mult = 1;
 }
 
-//==== Set Val And Check Limts ====//
+//==== Set Val And Check Limits ====//
 bool LimIntParm::SetValCheckLimits( double val )
 {
     if ( !IntParm::SetValCheckLimits( val ) )
@@ -428,7 +429,7 @@ PowIntParm::PowIntParm() : IntParm()
     m_Base = 1;
 }
 
-//==== Set Val And Check Limts ====//
+//==== Set Val And Check Limits ====//
 bool PowIntParm::SetValCheckLimits( double val )
 {
     if ( !IntParm::SetValCheckLimits( val ) )
@@ -718,7 +719,23 @@ DriverGroup::~DriverGroup()
 
 void DriverGroup::SetChoice( int choice, int grpid )
 {
-    m_CurrChoices[choice] = grpid;
+    if ( choice < m_CurrChoices.size() )
+    {
+        m_CurrChoices[choice] = grpid;
+    }
+}
+
+void DriverGroup::SetChoices( const vector< int > &choices )
+{
+    for ( int i = 0; i < choices.size() && i < m_CurrChoices.size(); i++ )
+    {
+        m_CurrChoices[i] = choices[i];
+    }
+}
+
+bool DriverGroup::IsDriver( int dvar )
+{
+    return vector_contains_val( m_CurrChoices, dvar );
 }
 
 //==== Encode Data To XML Data Structure ====//
@@ -737,9 +754,8 @@ void DriverGroup::DecodeXml( xmlNodePtr & node )
     xmlNodePtr n = XmlUtil::GetNode( node, m_Name.c_str(), 0 );
     if ( n )
     {
-        m_Nvar = XmlUtil::FindInt( n, "NumVar", m_Nvar );
-        m_Nchoice = XmlUtil::FindInt( n, "NumChoices", m_Nvar );
-        m_CurrChoices = XmlUtil::ExtractVectorIntNode( n, "ChoiceVec" );
+        vector< int > tmp = XmlUtil::ExtractVectorIntNode( n, "ChoiceVec" );
+        SetChoices( tmp );
     }
 }
 
@@ -784,7 +800,7 @@ void DriverGroup::Test( vector< string > parmIDs, double tol )
 
             if( failonce )
             {
-                printf( "Error, driver group mis-calcualted parameters.\n" );
+                printf( "Error, driver group mis-calculated parameters.\n" );
                 printf( " Drivers: " );
                 for( int k = 0; k < m_Nchoice; k++ )
                 {

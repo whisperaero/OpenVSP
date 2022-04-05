@@ -268,14 +268,12 @@ bool VarPresetMgrSingleton::AddCurrVar()
         return false;
     }
 
-    if ( CheckForDuplicateVar( m_WorkingParmID ) )
+    if ( CheckForDuplicateParm( m_WorkingParmID ) )
     {
         return false;
     }
 
-    AddVar( m_WorkingParmID );
-
-    return true;
+    return AddVar( m_WorkingParmID );
 }
 
 //==== Check For Duplicate Variable  ====//
@@ -419,7 +417,7 @@ void VarPresetMgrSingleton::SetWorkingParmID( const string & parm_id )
 bool VarPresetMgrSingleton::CheckForEmpty( int curGroupIndex, int curSettingIndex )
 {
     // If there aren't any existing groups or settings, return
-    if ( curSettingIndex == -1 && curGroupIndex == -1 )
+    if ( curSettingIndex == -1 || curGroupIndex == -1 )
     {
         return true;
     }
@@ -555,7 +553,7 @@ bool VarPresetMgrSingleton::SavePreset()
 
 void VarPresetMgrSingleton::ApplySetting()
 {
-    //cout << "Setting Change Has Occured -----------------------------------------" << endl;
+    //cout << "Setting Change Has Occurred -----------------------------------------" << endl;
     int group_index = GetActiveGroupIndex();
 
     // Group Contains at least 1 Setting
@@ -583,7 +581,7 @@ void VarPresetMgrSingleton::ApplySetting()
 //==== Setting Change ====//
 void VarPresetMgrSingleton::SettingChange( int set_index )
 {
-    //cout << "Setting Change Has Occured -----------------------------------------" << endl;
+    //cout << "Setting Change Has Occurred -----------------------------------------" << endl;
     int group_index = GetActiveGroupIndex();
 
     // Group Contains at least 1 Setting
@@ -612,7 +610,7 @@ void VarPresetMgrSingleton::SettingChange( const string & set_name )
 //==== Group Change ====//
 void VarPresetMgrSingleton::GroupChange( int group_index )
 {
-    //cout << "Group Change Has Occured -------------------------------" << endl;
+    //cout << "Group Change Has Occurred -------------------------------" << endl;
     // Get Current Group Index and Text
     m_CurGroupIndex = group_index;
     m_CurGroupText = m_PresetVec[ m_CurGroupIndex ].GetGroupName();
@@ -772,13 +770,27 @@ vector <double> VarPresetMgrSingleton::GetParmVals( const string &group_name, co
 //==== Get Setting Names ====//
 vector <string> VarPresetMgrSingleton::GetSettingNames( int group_index )
 {
-    return m_PresetVec[group_index].GetSettingNameVec();
+    if ( group_index >= 0 && group_index < m_PresetVec.size() )
+    {
+        return m_PresetVec[group_index].GetSettingNameVec();
+    }
+    else
+    {
+        return vector < string > {};
+    }
 }
 
 vector <string> VarPresetMgrSingleton::GetSettingNames( const string & group_name )
 {
     int group_index = vector_find_val( GetGroupNames(), group_name );
-    return GetSettingNames( group_index );
+    if ( group_index >= 0 )
+    {
+        return GetSettingNames( group_index );
+    }
+    else
+    {
+        return vector < string > {};
+    }
 }
 
 //==== Get Group Names ====//
@@ -792,7 +804,7 @@ vector <string> VarPresetMgrSingleton::GetGroupNames()
     return vec;
 }
 
-//==== Check For Repeat Parmeters ====//
+//==== Check For Repeat Parameters ====//
 // Checks for Repeat Parameters across all groups
 bool VarPresetMgrSingleton::CheckForDuplicateParm( const string & p_ID )
 {
@@ -876,7 +888,8 @@ xmlNodePtr VarPresetMgrSingleton::DecodeXml( xmlNodePtr & node )
 
     if ( m_CurGroupIndex >= 0 && m_CurSettingIndex >= 0 )
     {
-        // Assign Current Setting Name
+        // Assign Current Group and Setting Name
+        m_CurGroupText = m_PresetVec[m_CurGroupIndex].GetGroupName();
         m_CurSettingText = m_PresetVec[ m_CurGroupIndex ].GetSettingName( m_CurSettingIndex );
         m_PresetVec[ m_CurGroupIndex ].SetCurSetName( m_CurSettingText );
     }

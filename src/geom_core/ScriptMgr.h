@@ -45,7 +45,7 @@ public:
     void Init();
 
     //==== Read And Execute Script File  ====//
-    void ReadExecuteScriptFile( const string &  file_name, const string &  function_name = "void main()" );
+    int ReadExecuteScriptFile( const string &  file_name, const string &  function_name = "main" );
 
     //==== Read Script From File - Return Module Name ====//
     string ReadScriptFromFile( const string & module_name, const string &  file_name );
@@ -59,7 +59,7 @@ public:
     //==== Find Script And Remove ====//
     bool RemoveScript( const string &  module_name );
 
-    bool ExecuteScript(  const char* module_name,  const char* function_name, bool arg_flag = false, double arg = 0.0 );
+    int ExecuteScript(  const char* module_name,  const char* function_name, bool arg_flag = false, double arg = 0.0, bool by_decl = true );
 
     void AddToMessages( const string & msg )                { m_ScriptMessages += msg; }
     void ClearMessages()                                    { m_ScriptMessages.clear(); }
@@ -102,7 +102,6 @@ public:
     double Deg2Rad( double d )                      { return d*DEG_2_RAD; }
     double Min( double x, double y )                { return  (x < y ) ? x : y; }
     double Max( double x, double y )                { return  (x > y ) ? x : y; }
-    string GetVSPVersion()                          { return VSPVERSION4; }
 
     void GenAPIDocs( const string & file_name )
     {
@@ -144,6 +143,7 @@ private:
     CScriptArray* FindGeoms();
     CScriptArray* FindGeomsWithName( const string & name );
     CScriptArray* GetGeomParmIDs( const string & geom_id );
+    CScriptArray* GetGeomChildren( const string & geom_id );
     CScriptArray* GetSubSurfIDVec( const string & geom_id );
     CScriptArray* GetAllSubSurfIDs();
     CScriptArray* GetSubSurf( const string & geom_id, const string & name );
@@ -159,6 +159,9 @@ private:
     CScriptArray* ReadFileXSec( const string& xsec_id, const string& file_name );
     CScriptArray* GetAirfoilUpperPnts( const string& xsec_id );
     CScriptArray* GetAirfoilLowerPnts( const string& xsec_id );
+    CScriptArray* ReadBORFileXSec( const string& bor_id, const string& file_name );
+    CScriptArray* GetBORAirfoilUpperPnts( const string& bor_id );
+    CScriptArray* GetBORAirfoilLowerPnts( const string& bor_id );
     CScriptArray* GetGeomSetAtIndex( int index );
     CScriptArray* GetGeomSet( const string & name );
 
@@ -182,10 +185,12 @@ private:
     CScriptArray* FindContainerParmIDs( const string & parm_container_id );
     CScriptArray* GetUpperCSTCoefs( const string & xsec_id );
     CScriptArray* GetLowerCSTCoefs( const string & xsec_id );
+    CScriptArray* GetBORUpperCSTCoefs( const string & bor_id );
+    CScriptArray* GetBORLowerCSTCoefs( const string & bor_id );
 
     CScriptArray* GetEditXSecUVec( const string& xsec_id );
     CScriptArray* GetEditXSecCtrlVec( const string & xsec_id, const bool non_dimensional );
-    void SetEditXSecPnts( const string & xsec_id, CScriptArray* t_vec, CScriptArray* control_pts );
+    void SetEditXSecPnts( const string & xsec_id, CScriptArray* t_vec, CScriptArray* control_pts, CScriptArray* r_vec );
     CScriptArray* GetEditXSecFixedUVec( const string& xsec_id );
     void SetEditXSecFixedUVec( const string & xsec_id, CScriptArray* fixed_u_vec );
 
@@ -193,6 +198,8 @@ private:
 
     void SetXSecPnts( const string& xsec_id, CScriptArray* pnt_arr );
     void SetAirfoilPnts( const string& xsec_id, CScriptArray* up_pnt_arr, CScriptArray* low_pnt_arr );
+    void SetBORXSecPnts( const string& bor_id, CScriptArray* pnt_arr );
+    void SetBORAirfoilPnts( const string& bor_id, CScriptArray* up_pnt_arr, CScriptArray* low_pnt_arr );
     void SetVec3dArray( CScriptArray* arr );
 
     CScriptArray* GetHersheyBarLiftDist( const int &npts, const double &alpha, const double &Vinf, const double &span, bool full_span_flag = false );
@@ -207,6 +214,8 @@ private:
 
     void SetUpperCST( const string& xsec_id, int deg, CScriptArray* coefs );
     void SetLowerCST( const string& xsec_id, int deg, CScriptArray* coefs );
+    void SetBORUpperCST( const string& bor_id, int deg, CScriptArray* coefs );
+    void SetBORLowerCST( const string& bor_id, int deg, CScriptArray* coefs );
 
     void SetIntAnalysisInput( const string& analysis, const string & name, CScriptArray* indata, int index );
     void SetDoubleAnalysisInput( const string& analysis, const string & name, CScriptArray* indata, int index );

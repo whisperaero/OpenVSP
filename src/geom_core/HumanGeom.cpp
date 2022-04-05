@@ -1155,7 +1155,7 @@ void HumanGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
 }
 
 //==== Count Number of Sym Surfaces ====//
-int HumanGeom::GetNumTotalMeshs()
+int HumanGeom::GetNumTotalMeshs() const
 {
     return GetNumSymmCopies() * GetNumMainMeshs();
 }
@@ -1201,7 +1201,7 @@ void HumanGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview )
     }
 }
 
-vector<TMesh*> HumanGeom::CreateTMeshVec()
+vector<TMesh*> HumanGeom::CreateTMeshVec() const
 {
     vector<TMesh*> retTMeshVec;
 
@@ -1331,7 +1331,7 @@ void HumanGeom::SetupMesh( Pinocchio::Mesh &m )
 
             int ivert = m_half_tris[i][k] + NUM_MESH_VERT;
 
-            if ( m_VertCopySet.count( m_half_tris[i][k] ) )  // This vert is a duplciate.
+            if ( m_VertCopySet.count( m_half_tris[i][k] ) )  // This vert is a duplicate.
             {
                 ivert = m_half_tris[i][k];
             }

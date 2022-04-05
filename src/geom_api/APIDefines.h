@@ -138,6 +138,17 @@ enum CF_TURB_EQN { CF_TURB_EXPLICIT_FIT_SPALDING = 0,
                    CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH
                  }; // Friction Coefficient Turbulent Eqns ENUM
 
+enum CHEVRON_TYPE { CHEVRON_NONE,
+                    CHEVRON_PARTIAL,
+                    CHEVRON_FULL,
+                    CHEVRON_NUM_TYPES
+                  };
+
+enum CHEVRON_W01_MODES { CHEVRON_W01_SE, // Start and End
+                         CHEVRON_W01_CW, // Center and Width
+                         CHEVRON_W01_NUM_MODES
+                       };
+
 enum COLLISION_ERRORS { COLLISION_OK,
                         COLLISION_INTERSECT_NO_SOLUTION,
                         COLLISION_CLEAR_NO_SOLUTION,
@@ -146,7 +157,7 @@ enum COLLISION_ERRORS { COLLISION_OK,
 enum COMPUTATION_FILE_TYPE  {   NO_FILE_TYPE        = 0,
                                 COMP_GEOM_TXT_TYPE  = 1,
                                 COMP_GEOM_CSV_TYPE  = 2,
-                                DRAG_BUILD_TSV_TYPE = 4,
+                                DRAG_BUILD_TSV_TYPE_DEPRECATED = 4,
                                 SLICE_TXT_TYPE      = 8,
                                 MASS_PROP_TXT_TYPE  = 16,
                                 DEGEN_GEOM_CSV_TYPE = 32,
@@ -168,6 +179,7 @@ enum COMPUTATION_FILE_TYPE  {   NO_FILE_TYPE        = 0,
                                 CFD_CURV_TYPE       = 2097152,
                                 CFD_PLOT3D_TYPE     = 4194304,
                                 CFD_VSPGEOM_TYPE    = 8388608,
+                                VSPAERO_VSPGEOM_TYPE = 16777216,
                             };
 
 enum DELIM_TYPE { DELIM_COMMA,
@@ -183,7 +195,8 @@ enum DIMENSION_SET { SET_3D,
 
 enum DIR_INDEX { X_DIR = 0,
                  Y_DIR = 1,
-                 Z_DIR = 2
+                 Z_DIR = 2,
+                 ALL_DIR = 3
                };
 
 enum DISPLAY_TYPE { DISPLAY_BEZIER,
@@ -221,7 +234,9 @@ enum ERROR_CODE {   VSP_OK,
                     VSP_CONFORMAL_PARENT_UNSUPPORTED,
                     VSP_UNEXPECTED_RESET_REMAP_ID,
                     VSP_INVALID_INPUT_VAL,
-                    VSP_INVALID_CF_EQN
+                    VSP_INVALID_CF_EQN,
+                    VSP_INVALID_DRIVERS,
+                    VSP_ADV_LINK_BUILD_FAIL
                 };
 
 enum EXCRES_TYPE { EXCRESCENCE_COUNT = 0,
@@ -540,8 +555,9 @@ enum SYM_FLAG {  SYM_XY = ( 1 << 0 ),
               }; // Symmetry Flags
 
 enum SYM_XSEC_TYP { SYM_NONE,
-                    SYM_RL // Right/Left Symmetry
-                    //SYM_TB  // Top/Bottom Symmetry
+                    SYM_RL, // Right/Left Symmetry
+                    SYM_TB,  // Top/Bottom Symmetry
+                    SYM_ALL
                   };
 
 enum TEMP_UNITS { TEMP_UNIT_K = 0,
@@ -577,7 +593,8 @@ enum VIEW_TYPE { VIEW_LEFT,
                  VIEW_BOTTOM,
                  VIEW_FRONT,
                  VIEW_REAR,
-                 VIEW_NONE
+                 VIEW_NONE,
+                 VIEW_NUM_TYPES
                };
 
 enum VSPAERO_ANALYSIS_METHOD { VORTEX_LATTICE,
@@ -608,6 +625,11 @@ enum VSPAERO_STABILITY_TYPE { STABILITY_OFF,
                               STABILITY_IMPULSE // TODO: Implement with later VSPAERO version
                             };
 
+enum VSPAERO_CLMAX_TYPE { CLMAX_OFF,
+                          CLMAX_2D,
+                          CLMAX_CARLSON // Carlson's Pressure Correlation
+                        };
+
 enum VSP_SURF_CFD_TYPE { CFD_NORMAL,
                          CFD_NEGATIVE,
                          CFD_TRANSPARENT,
@@ -622,6 +644,14 @@ enum VSP_SURF_TYPE { NORMAL_SURF,
                      PROP_SURF,
                      NUM_SURF_TYPES,
                    };
+
+enum W_HINT { W_RIGHT_0,
+              W_BOTTOM,
+              W_LEFT,
+              W_TOP,
+              W_RIGHT_1,
+              W_FREE,
+            };
 
 enum WING_BLEND { BLEND_FREE,
                   BLEND_ANGLES,
@@ -682,6 +712,14 @@ enum XSEC_CRV_TYPE {XS_UNDEFINED = -1,
                     XS_ONE_SIX_SERIES,
                     XS_NUM_TYPES
                    };
+
+enum XSEC_DRIVERS { WIDTH_XSEC_DRIVER,     // First two are used for Circle.  Others are used for general XSecCurves
+                    AREA_XSEC_DRIVER,      // Area must be second entry.
+                    HEIGHT_XSEC_DRIVER,
+                    HWRATIO_XSEC_DRIVER,
+                    NUM_XSEC_DRIVER,
+                    CIRCLE_NUM_XSEC_DRIVER = 2
+                  };
 
 enum XSEC_SIDES_TYPE {  XSEC_BOTH_SIDES,
                         XSEC_LEFT_SIDE,

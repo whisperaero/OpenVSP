@@ -68,13 +68,8 @@ DesignVarScreen::DesignVarScreen( ScreenMgr* mgr ) : TabScreen( mgr, 300, 463, "
     m_PickLayout.AddDividerBox( "Variable List" );
 
     // Pointer for the widths of each column in the browser to support resizing
-    int *col_widths = new int[4]; // 4 columns
-
-    // Initial column widths & keep the memory address
-    col_widths[0] = 86;
-    col_widths[1] = 86;
-    col_widths[2] = 86;
-    col_widths[3] = 40;
+    // Last column width must be 0
+    static int col_widths[] = { 86, 86, 86, 40, 0 }; // widths for each column
 
     int browser_h = 200;
     m_VarBrowser = m_PickLayout.AddColResizeBrowser( col_widths, 4, browser_h );
@@ -122,9 +117,12 @@ bool DesignVarScreen::Update()
     //==== Update Parm Picker ====//
     m_ParmPicker.Update();
 
-    m_XDDMGroup.Update( DesignVarMgr.m_WorkingXDDMType.GetID() );
+    Vehicle* veh = m_ScreenMgr->GetVehiclePtr();
+    m_XDDMGroup.Update( veh->m_WorkingXDDMType.GetID() );
 
     //==== Update Parm Browser ====//
+    int h_pos = m_VarBrowser->hposition();
+    int v_pos = m_VarBrowser->position();
     m_VarBrowser->clear();
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
@@ -158,6 +156,9 @@ bool DesignVarScreen::Update()
     {
         m_VarBrowser->select( index + 2 );
     }
+
+    m_VarBrowser->hposition( h_pos );
+    m_VarBrowser->position( v_pos );
 
     // Parameter GUI got out of sync.  Probably from File->New or similar.
     if ( m_NVarLast != num_vars )
@@ -225,11 +226,12 @@ void DesignVarScreen::Hide()
 void DesignVarScreen::CallBack( Fl_Widget* w )
 {
     assert( m_ScreenMgr );
+    Vehicle* veh = m_ScreenMgr->GetVehiclePtr();
 
     if( Fl::event() == FL_PASTE || Fl::event() == FL_DND_RELEASE )
     {
         string ParmID( Fl::event_text() );
-        DesignVarMgr.AddVar( ParmID, DesignVarMgr.m_WorkingXDDMType.Get() );
+        DesignVarMgr.AddVar( ParmID, veh->m_WorkingXDDMType.Get() );
         RebuildAdjustTab();
     }
     else if (  w == m_VarBrowser )
@@ -242,12 +244,12 @@ void DesignVarScreen::CallBack( Fl_Widget* w )
         if ( dv )
         {
             m_ParmPicker.SetParmChoice( dv->m_ParmID );
-            DesignVarMgr.m_WorkingXDDMType = dv->m_XDDM_Type;
+            veh->m_WorkingXDDMType = dv->m_XDDM_Type;
         }
         else
         {
             m_ParmPicker.SetParmChoice( string() );
-            DesignVarMgr.m_WorkingXDDMType = vsp::XDDM_VAR;
+            veh->m_WorkingXDDMType = vsp::XDDM_VAR;
         }
     }
 

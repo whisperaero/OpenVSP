@@ -94,7 +94,7 @@ public:
     {
         return m_LastVal;
     }
-    double operator () ()
+    double operator () () const
     {
         return Get();
     }
@@ -176,8 +176,7 @@ protected:
     double m_UpperLimit;
 
     bool m_ActiveFlag;
-    bool m_LinkedFlag;
-    bool m_LinkUpdateFlag;
+    bool m_LinkUpdateFlag;  // Used to identify actively updating Parms to prevent circular updates.
     string m_LinkContainerID;
 
     virtual string GenerateID();
@@ -232,11 +231,11 @@ public:
 
     int Set( int val );
 
-    int Get()
+    int Get() const
     {
         return ( int )( m_Val + 0.5 );
     }
-    int operator () ()
+    int operator () () const
     {
         return Get();
     }
@@ -336,7 +335,7 @@ public:
     BoolParm();
 
     virtual bool Set( bool val );
-    bool Get()
+    bool Get() const
     {
         if ( m_Val > 0.5 )
         {
@@ -344,7 +343,7 @@ public:
         }
         return false;
     }
-    bool operator () ()
+    bool operator () () const
     {
         return Get();
     }
@@ -385,10 +384,11 @@ public:
     virtual void UpdateGroup( vector< string > parmIDs ) = 0;
     virtual bool ValidDrivers( vector< int > choices ) = 0;
 
-    void SetChoices( const vector< int > &choices )      { m_CurrChoices = choices; }
+    void SetChoices( const vector< int > &choices );
     vector< int > GetChoices()                    { return m_CurrChoices; }
     int GetNchoice() const                        { return m_Nchoice; }
     int GetNvar() const                           { return m_Nvar; }
+    bool IsDriver( int dvar );
 
     void SetName( const string & name )           { m_Name = name; }
     string GetName()                              { return m_Name; }

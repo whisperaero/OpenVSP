@@ -13,6 +13,7 @@
 #include "StringUtil.h"
 #include "StlHelper.h"
 #include "Vehicle.h"
+#include "VspUtil.h"
 
 using std::string;
 
@@ -100,7 +101,7 @@ void ParmContainer::RemoveParm( const string& id )
 }
 
 //==== Return Pointer To Parent Container ====//
-ParmContainer* ParmContainer::GetParentContainerPtr()
+ParmContainer* ParmContainer::GetParentContainerPtr() const
 {
     return ParmMgr.FindParmContainer( m_ParentContainer );
 }
@@ -108,7 +109,7 @@ ParmContainer* ParmContainer::GetParentContainerPtr()
 //==== Create A Unique ID  =====//
 string ParmContainer::GenerateID()
 {
-    return ParmMgr.GenerateID( 10 );
+    return GenerateRandomID( 10 );
 }
 
 void ParmContainer::ChangeID( string id )
@@ -290,6 +291,10 @@ void ParmContainer::LoadGroupParmVec( vector< string > & parm_vec, bool displayn
         m_GroupNames.push_back( iter->first );
         sort( iter->second.begin(), iter->second.end(), ParmNameCompare );
     }
+
+    // Rebuild Parm Links. Could also call LinkMgr.BuildLinkableParmData(), but this allows the links 
+    // to just be rebuild once after this function is iteratively called when saving or loading a model.
+    ParmMgr.SetDirtyFlag( true ); 
 }
 
 void ParmContainer::LoadGroupParmVec( vector< string > & parm_vec )
@@ -343,6 +348,11 @@ string ParmContainer::FindParm( int group_ind, int parm_ind  )
 //==== Find Parm ID Given GroupName and Parm Name ====//
 string ParmContainer::FindParm( const string& parm_name, const string& group_name  )
 {
+    if ( ParmMgr.GetDirtyFlag() )
+    {
+        LinkMgr.BuildLinkableParmData();
+    }
+
     string id;
     map< string, vector< string > >::iterator iter;
     iter = m_GroupParmMap.find( group_name );

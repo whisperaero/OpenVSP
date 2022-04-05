@@ -10,7 +10,7 @@
 #include "VSPAEROPlotScreen.h"
 #include "float.h"
 
-#include "Util.h"
+#include "VspUtil.h"
 
 
 //////////////////////////////////////////////////////////////////////
@@ -49,7 +49,7 @@ VSPAEROPlotScreen::VSPAEROPlotScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO
     int yDataSelectHeight = 11 * rowHeight;
     int legendHeight = 6 * rowHeight;
     int actionButtonHeight = 6 * rowHeight;          //space reserved for action buttons at the bottom
-    //  remaining space is used for the flow condition borwser
+    //  remaining space is used for the flow condition browser
     int flowConditionSelectHeight = m_ConvergenceLayout.GetH() - 2 * groupBorderWidth - yDataSelectHeight - legendHeight - actionButtonHeight - groupBorderWidth;
 
     GroupLayout convergenceYDataSelectLayout;
@@ -123,7 +123,7 @@ VSPAEROPlotScreen::VSPAEROPlotScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO
     // Plot layout
     int plotWidth = totalWidth - controlWidth - 2 * groupBorderWidth;
     int plotTopBottomMargin = 25;
-    int plotSideMargin = 20;
+    int plotSideMargin = 25;
     m_ConvergenceLayout.AddX( controlWidth + 2 * groupBorderWidth );
     m_ConvergenceLayout.AddSubGroupLayout( m_ConvergencePlotLayout, plotWidth, m_ConvergenceLayout.GetH() - 2 * groupBorderWidth );
     m_ConvergencePlotLayout.AddX( plotSideMargin );
@@ -643,17 +643,7 @@ void VSPAEROPlotScreen::SetDefaultView()
     }
     else
     {
-        switch ( analysis_type )
-        {
-            case vsp::VORTEX_LATTICE:
-                m_LoadDistTab->show();
-                break;
-            case vsp::PANEL:
-                m_ConvergenceTab->show();
-                break;
-            default:
-                break;
-        }
+        m_LoadDistTab->show();
     }
 
     m_SelectDefaultData = true;
@@ -731,11 +721,10 @@ bool VSPAEROPlotScreen::Update()
 
     // Update load distribution
     // Let's check to see what analysis method was used on the first result found
-    // note that only VSPAEROMgr clear alls VSPAERO_* results from the results manager each time it's run all analyses in the results 'should' have the same analysis method
+    // note that only VSPAEROMgr clear all VSPAERO_* results from the results manager each time it's run all analyses in the results 'should' have the same analysis method
     resultName = "VSPAERO_Load";
     res = ResultsMgr.FindResults( resultName, 0 );
-    // Load distribution plots are supported only in certain modes (Panel method is not currently supported)
-    if ( res && res->FindPtr( "AnalysisMethod" )->GetInt( 0 ) == vsp::VORTEX_LATTICE )
+    if ( res )
     {
         m_LoadDistTab->activate();
 
@@ -1221,7 +1210,7 @@ void VSPAEROPlotScreen::CallBack( Fl_Widget* w )
             bool oneSelected = false;
             for ( unsigned int iCase = 1; iCase <= m_SweepYDataBrowser->size(); iCase++ )
             {
-                if ( m_SweepYDataBrowser->selected( iCase ) & !oneSelected )
+                if ( m_SweepYDataBrowser->selected( iCase ) && !oneSelected )
                 {
                     oneSelected = true;
                 }
@@ -1249,7 +1238,7 @@ void VSPAEROPlotScreen::CallBack( Fl_Widget* w )
             bool oneSelected = false;
             for ( unsigned int iCase = 1; iCase <= m_SweepXDataBrowser->size(); iCase++ )
             {
-                if ( m_SweepXDataBrowser->selected( iCase ) & !oneSelected )
+                if ( m_SweepXDataBrowser->selected( iCase ) && !oneSelected )
                 {
                     oneSelected = true;
                 }
@@ -1301,7 +1290,7 @@ void VSPAEROPlotScreen::UpdateConvergenceFlowConditionBrowser()
         if( res )
         {
             char strbuf[1024];
-            ConstructFlowConditionString( strbuf, res, false );
+            ConstructFlowConditionString( strbuf, res, false, true );
             m_ConvergenceFlowConditionBrowser->add( strbuf );
             if( m_SelectDefaultData )   //select ALL flow conditions
             {
@@ -1344,31 +1333,27 @@ void VSPAEROPlotScreen::UpdateLoadDistFlowConditionBrowser()
         Results* res = ResultsMgr.FindResults( resultName, iCase );
         if( res )
         {
-            // Load distribution plots are supported only in certain modes (Panel method is not currently supported)
-            if ( res->FindPtr( "AnalysisMethod" )->GetInt( 0 ) == vsp::VORTEX_LATTICE )
+            char strbuf[1024];
+            ConstructFlowConditionString( strbuf, res, false, false );
+            m_LoadDistFlowConditionBrowser->add( strbuf );
+            if ( VSPAEROMgr.m_LoadDistSelectType.Get() == VSPAEROMgr.LOAD_SELECT_TYPE )
             {
-                char strbuf[1024];
-                ConstructFlowConditionString( strbuf, res, false );
-                m_LoadDistFlowConditionBrowser->add( strbuf );
-                if ( VSPAEROMgr.m_LoadDistSelectType.Get() == VSPAEROMgr.LOAD_SELECT_TYPE )
-                {
-                    if ( m_SelectDefaultData )   //select ALL flow conditions
-                    {
-                        m_LoadDistFlowConditionSelectedResultIDs.push_back( res->GetID() );
-                        m_LoadDistFlowConditionBrowser->select( iCase + 1 ); //account for browser using 1-based indexing
-                    }
-                    else if ( iCase < wasSelected.size() && wasSelected[iCase] ) // restore original row selections
-                    {
-                        m_LoadDistFlowConditionSelectedResultIDs.push_back( res->GetID() );
-                        m_LoadDistFlowConditionBrowser->select( iCase + 1 ); //account for browser using 1-based indexing
-                    }
-                }
-                else if ( VSPAEROMgr.m_LoadDistSelectType.Get() == VSPAEROMgr.BLADE_SELECT_TYPE )
+                if ( m_SelectDefaultData )   //select ALL flow conditions
                 {
                     m_LoadDistFlowConditionSelectedResultIDs.push_back( res->GetID() );
-                    m_LoadDistFlowConditionBrowser->select( iCase + 1 );
-                    break; // Only list the first flow condition, since the others are ignored in teh group and rotor output files
+                    m_LoadDistFlowConditionBrowser->select( iCase + 1 ); //account for browser using 1-based indexing
                 }
+                else if ( iCase < wasSelected.size() && wasSelected[iCase] ) // restore original row selections
+                {
+                    m_LoadDistFlowConditionSelectedResultIDs.push_back( res->GetID() );
+                    m_LoadDistFlowConditionBrowser->select( iCase + 1 ); //account for browser using 1-based indexing
+                }
+            }
+            else if ( VSPAEROMgr.m_LoadDistSelectType.Get() == VSPAEROMgr.BLADE_SELECT_TYPE )
+            {
+                m_LoadDistFlowConditionSelectedResultIDs.push_back( res->GetID() );
+                m_LoadDistFlowConditionBrowser->select( iCase + 1 );
+                break; // Only list the first flow condition, since the others are ignored in the group and rotor output files
             }
         }   //if( res )
     }   //for (unsigned int iCase=0; iCase<numCases; iCase++)
@@ -1470,7 +1455,7 @@ void VSPAEROPlotScreen::UpdateSweepFlowConditionBrowser()
         if( res )
         {
             char strbuf[1024];
-            ConstructFlowConditionString( strbuf, res, false );
+            ConstructFlowConditionString( strbuf, res, false, true );
             m_SweepFlowConditionBrowser->add( strbuf );
             if( m_SelectDefaultData )   //select ALL flow conditions
             {
@@ -1576,7 +1561,7 @@ void VSPAEROPlotScreen::UpdateUnsteadyFlowConditionBrowser()
         if ( res )
         {
             char strbuf[1024];
-            ConstructFlowConditionString( strbuf, res, false );
+            ConstructFlowConditionString( strbuf, res, false, true );
             m_UnsteadyFlowConditionBrowser->add( strbuf );
             if ( VSPAEROMgr.m_UnsteadyGroupSelectType.Get() == VSPAEROMgr.HISTORY_SELECT_TYPE )
             {
@@ -1598,7 +1583,7 @@ void VSPAEROPlotScreen::UpdateUnsteadyFlowConditionBrowser()
             {
                 m_UnsteadyFlowConditionSelectedResultIDs.push_back( res->GetID() );
                 m_UnsteadyFlowConditionBrowser->select( iCase + 1 );
-                break; // Only list the first flow condition, since the others are ignored in teh group and rotor output files
+                break; // Only list the first flow condition, since the others are ignored in the group and rotor output files
             }
         }   //if( res )
     }   //for (unsigned int iCase=0; iCase<numCases; iCase++)
@@ -1682,7 +1667,7 @@ void VSPAEROPlotScreen::UpdateUnsteadySelectionBrowser()
     m_UnsteadySelectBrowser->position( scrollPos );
 }
 
-void VSPAEROPlotScreen::ConstructFlowConditionString( char * strbuf, Results * res, bool includeResultId )
+void VSPAEROPlotScreen::ConstructFlowConditionString( char * strbuf, Results * res, bool includeResultId, bool include_recref )
 {
     if( strbuf && res )
     {
@@ -1692,6 +1677,7 @@ void VSPAEROPlotScreen::ConstructFlowConditionString( char * strbuf, Results * r
         double alpha = 0;
         double beta = 0;
         double mach = 0;
+        double recref = 0;
 
         nvd = res->FindPtr( "FC_AoA_" );
         if( nvd )
@@ -1714,15 +1700,32 @@ void VSPAEROPlotScreen::ConstructFlowConditionString( char * strbuf, Results * r
             mach = dataVector[dataVector.size() - 1];
         }
 
-        if( includeResultId )
+        nvd = res->FindPtr( "FC_ReCref_" );
+        if ( nvd )
         {
-            sprintf( strbuf, "a=%.2g, b=%.2g, M=%.2g, resID=%s", alpha, beta, mach, res->GetID().c_str() );
+            dataVector = nvd->GetDoubleData();
+            recref = dataVector[dataVector.size() - 1];
+
+            if ( includeResultId )
+            {
+                sprintf( strbuf, "a=%.2g, b=%.2g, M=%.2g, Re=%.2g, resID=%s", alpha, beta, mach, recref, res->GetID().c_str() );
+            }
+            else
+            {
+                sprintf( strbuf, "a=%.2g, b=%.2g, M=%.2g, Re=%.2g", alpha, beta, mach, recref );
+            }
         }
         else
         {
-            sprintf( strbuf, "a=%.2g, b=%.2g, M=%.2g", alpha, beta, mach );
+            if ( includeResultId )
+            {
+                sprintf( strbuf, "a=%.2g, b=%.2g, M=%.2g, resID=%s", alpha, beta, mach, res->GetID().c_str() );
+            }
+            else
+            {
+                sprintf( strbuf, "a=%.2g, b=%.2g, M=%.2g", alpha, beta, mach );
+            }
         }
-
     }
 }
 
@@ -1779,11 +1782,11 @@ void VSPAEROPlotScreen::UpdateConvergenceYDataBrowser()
     vector < string > dataNames = ResultsMgr.GetAllDataNames( resultID );
     for ( unsigned int iDataName = 0; iDataName < dataNames.size(); iDataName++ )
     {
-        if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 )   != 0 )  &
-                ( strcmp( dataNames[iDataName].c_str(), "WakeIter" ) != 0 )  &
-                ( strcmp( dataNames[iDataName].c_str(), "Mach" )     != 0 )  &
-                ( strcmp( dataNames[iDataName].c_str(), "Alpha" )    != 0 )  &
-                ( strcmp( dataNames[iDataName].c_str(), "Beta" )     != 0 )  &
+        if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 )   != 0 )  &&
+                ( strcmp( dataNames[iDataName].c_str(), "WakeIter" ) != 0 )  &&
+                ( strcmp( dataNames[iDataName].c_str(), "Mach" )     != 0 )  &&
+                ( strcmp( dataNames[iDataName].c_str(), "Alpha" )    != 0 )  &&
+                ( strcmp( dataNames[iDataName].c_str(), "Beta" )     != 0 )  &&
                 ( strcmp( dataNames[iDataName].c_str(), "AnalysisMethod" ) != 0 ) )
         {
             m_ConvergenceYDataBrowser->add( dataNames[iDataName].c_str() );
@@ -1822,7 +1825,7 @@ void VSPAEROPlotScreen::UpdateLoadDistYDataBrowser()
     m_LoadDistYDataBrowser->clear();
 
     Results* load_res = ResultsMgr.FindResultsPtr( ResultsMgr.FindLatestResultsID( "VSPAERO_Load" ) );
-    Results* res;
+    Results* res = 0;
 
     string resultID, default_res;
 
@@ -1841,24 +1844,20 @@ void VSPAEROPlotScreen::UpdateLoadDistYDataBrowser()
 
     if( res && load_res )
     {
-        // Load distribution plots are supported only in certain modes (Panel method is not currently supported)
-        if ( load_res->FindPtr( "AnalysisMethod" )->GetInt( 0 ) == vsp::VORTEX_LATTICE )
+        vector < string > dataNames = ResultsMgr.GetAllDataNames( resultID );
+        for ( unsigned int iDataName = 0; iDataName < dataNames.size(); iDataName++ )
         {
-            vector < string > dataNames = ResultsMgr.GetAllDataNames( resultID );
-            for ( unsigned int iDataName = 0; iDataName < dataNames.size(); iDataName++ )
+            if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 )   != 0 )  &&
+                    ( strcmp( dataNames[iDataName].c_str(), "FC_Alpha" ) != 0 )  &&
+                    ( strcmp( dataNames[iDataName].c_str(), "FC_Beta" )  != 0 )  &&
+                    ( strcmp( dataNames[iDataName].c_str(), "WingId" )   != 0 )  &&
+                    ( strcmp( dataNames[iDataName].c_str(), "AnalysisMethod" ) != 0 ) &&
+                    ( strcmp( dataNames[iDataName].c_str(), "Station" ) != 0 ) &&
+                    ( strcmp( dataNames[iDataName].c_str(), "Group_Name" ) != 0 ) &&
+                    ( strcmp( dataNames[iDataName].c_str(), "Rotor_Num" ) != 0 ) &&
+                    ( strcmp( dataNames[iDataName].c_str(), "Blade_Num" ) != 0 ) )
             {
-                if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 )   != 0 )  &
-                        ( strcmp( dataNames[iDataName].c_str(), "FC_Alpha" ) != 0 )  &
-                        ( strcmp( dataNames[iDataName].c_str(), "FC_Beta" )  != 0 )  &
-                        ( strcmp( dataNames[iDataName].c_str(), "WingId" )   != 0 )  &
-                        ( strcmp( dataNames[iDataName].c_str(), "AnalysisMethod" ) != 0 ) &
-                        ( strcmp( dataNames[iDataName].c_str(), "Station" ) != 0 ) &
-                        ( strcmp( dataNames[iDataName].c_str(), "Group_Name" ) != 0 ) &
-                        ( strcmp( dataNames[iDataName].c_str(), "Rotor_Num" ) != 0 ) &
-                        ( strcmp( dataNames[iDataName].c_str(), "Blade_Num" ) != 0 ) )
-                {
-                    m_LoadDistYDataBrowser->add( dataNames[iDataName].c_str() );
-                }
+                m_LoadDistYDataBrowser->add( dataNames[iDataName].c_str() );
             }
         }
     }
@@ -1910,8 +1909,8 @@ void VSPAEROPlotScreen::UpdateSweepXYDataBrowser()
     {
         for ( unsigned int iDataName = 0; iDataName < dataNames.size(); iDataName++ )
         {
-            if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 )   != 0 )  &
-                    ( strcmp( dataNames[iDataName].c_str(), "WakeIter" ) != 0 )  &
+            if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 )   != 0 )  &&
+                    ( strcmp( dataNames[iDataName].c_str(), "WakeIter" ) != 0 )  &&
                     ( strcmp( dataNames[iDataName].c_str(), "AnalysisMethod" ) != 0 ) )
             {
                 m_SweepXDataBrowser->add( dataNames[iDataName].c_str() );
@@ -2152,16 +2151,16 @@ void VSPAEROPlotScreen::UpdateUnsteadyYDataBrowser()
     vector < string > dataNames = ResultsMgr.GetAllDataNames( resultID );
     for ( unsigned int iDataName = 0; iDataName < dataNames.size(); iDataName++ )
     {
-        if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 ) != 0 )  &
-            ( strcmp( dataNames[iDataName].c_str(), "WakeIter" ) != 0 )  &
-             ( strcmp( dataNames[iDataName].c_str(), "Mach" ) != 0 )  &
-             ( strcmp( dataNames[iDataName].c_str(), "Alpha" ) != 0 )  &
-             ( strcmp( dataNames[iDataName].c_str(), "Beta" ) != 0 )  &
-             ( strcmp( dataNames[iDataName].c_str(), "AnalysisMethod" ) != 0 ) &
-             ( strcmp( dataNames[iDataName].c_str(), "Time" ) != 0 ) &
-             ( strcmp( dataNames[iDataName].c_str(), "Group_Num" ) != 0 ) &
-             ( strcmp( dataNames[iDataName].c_str(), "Rotor_Num" ) != 0 ) &
-             ( strcmp( dataNames[iDataName].c_str(), "Group_Name" ) != 0 ) &
+        if ( ( strncmp( dataNames[iDataName].c_str(), "FC_", 3 ) != 0 )  &&
+            ( strcmp( dataNames[iDataName].c_str(), "WakeIter" ) != 0 )  &&
+             ( strcmp( dataNames[iDataName].c_str(), "Mach" ) != 0 )  &&
+             ( strcmp( dataNames[iDataName].c_str(), "Alpha" ) != 0 )  &&
+             ( strcmp( dataNames[iDataName].c_str(), "Beta" ) != 0 )  &&
+             ( strcmp( dataNames[iDataName].c_str(), "AnalysisMethod" ) != 0 ) &&
+             ( strcmp( dataNames[iDataName].c_str(), "Time" ) != 0 ) &&
+             ( strcmp( dataNames[iDataName].c_str(), "Group_Num" ) != 0 ) &&
+             ( strcmp( dataNames[iDataName].c_str(), "Rotor_Num" ) != 0 ) &&
+             ( strcmp( dataNames[iDataName].c_str(), "Group_Name" ) != 0 ) &&
              ( strcmp( dataNames[iDataName].c_str(), "RPM" ) != 0 ) ) // FIXME: Figure out why selecting rotor RPM causes the GUI to freeze
         {
             m_UnsteadyYDataBrowser->add( dataNames[iDataName].c_str() );
@@ -2311,7 +2310,7 @@ void VSPAEROPlotScreen::RedrawSweepPlot()
     //Redraw plot if data is available and selected
     bool expandOnly = false;
     int nPolarPoints = m_SweepFlowConditionSelectedResultIDs.size();
-    if ( ( nPolarPoints > 0 ) & ( xDataSetNames.size() > 0 ) & ( yDataSetNames.size() > 0 ) )
+    if ( ( nPolarPoints > 0 ) && ( xDataSetNames.size() > 0 ) && ( yDataSetNames.size() > 0 ) )
     {
         for ( int iXData = 0; iXData < xDataSetNames.size(); iXData++ )
         {
@@ -2394,7 +2393,7 @@ void VSPAEROPlotScreen::RedrawCpSlicePlot()
     bool expandOnly = false;
     vector < int > pos_type_vec;
 
-    if ( ( m_CpSliceCaseSelectedResultIDs.size() > 0 ) & ( m_CpSliceCutSelectedResultIDs.size() > 0 ) )
+    if ( ( m_CpSliceCaseSelectedResultIDs.size() > 0 ) && ( m_CpSliceCutSelectedResultIDs.size() > 0 ) )
     {
         for ( size_t iCut = 0; iCut < m_CpSliceCutSelectedResultIDs.size(); iCut++ )
         {
@@ -2699,7 +2698,7 @@ void VSPAEROPlotScreen::PlotConvergence( string resultID, vector <string> yDataS
                         AddPointLine( xDoubleData, yDoubleData, 2, c, 4, StyleWheel( m_ConvergenceiPlot ) );
 
                         char strbuf[100];
-                        ConstructFlowConditionString( strbuf, res, false );
+                        ConstructFlowConditionString( strbuf, res, false, true );
                         string legendstr = strbuf + string( "; Y: " ) + yDataSetNames[iDataSet];
                         m_ConvergenceLegendLayout.AddLegendEntry( legendstr, c );
                         m_ConvergenceiPlot++;
@@ -2772,9 +2771,9 @@ void VSPAEROPlotScreen::PlotLoadDistribution( string resultID, vector <string> y
     }
     else if ( strcmp( res->GetName().c_str(), "VSPAERO_Load" ) == 0 || strcmp( res->GetName().c_str(), "VSPAERO_Blade_Avg" ) == 0 )
     {
-        NameValData* wingIdResultDataPtr;
-        NameValData* xResultDataPtr;
-        NameValData* yResultDataPtr;
+        NameValData* wingIdResultDataPtr = 0;
+        NameValData* xResultDataPtr = 0;
+        NameValData* yResultDataPtr = 0;
         vector <double> xDoubleData_orig;
         string group_name, y_label;
 
@@ -2865,7 +2864,7 @@ void VSPAEROPlotScreen::PlotLoadDistribution( string resultID, vector <string> y
                     }
 
                     char strbuf[100];
-                    ConstructFlowConditionString( strbuf, res, false );
+                    ConstructFlowConditionString( strbuf, res, false, false );
                     legendstr = strbuf;
                 }
                 else if ( VSPAEROMgr.m_LoadDistSelectType.Get() == VSPAEROMgrSingleton::BLADE_SELECT_TYPE )
@@ -3008,7 +3007,7 @@ void VSPAEROPlotScreen::PlotUnsteady( string resultID, vector <string> yDataSetN
                         }
                         else if ( VSPAEROMgr.m_UnsteadyGroupSelectType.Get() == VSPAEROMgrSingleton::HISTORY_SELECT_TYPE )
                         {
-                            ConstructFlowConditionString( strbuf, res, false );
+                            ConstructFlowConditionString( strbuf, res, false, true );
                             legendstr = strbuf;
                         }
 

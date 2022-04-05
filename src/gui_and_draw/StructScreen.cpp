@@ -117,12 +117,8 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 430, 650, "FEA Me
     m_StructureTabLayout.AddDividerBox( "Structure Selection" );
 
     // Pointer for the widths of each column in the browser to support resizing
-    int *struct_col_widths = new int[3]; // 3 columns
-
-    // Initial column widths & keep the memory address
-    struct_col_widths[0] = 172;
-    struct_col_widths[1] = 151;
-    struct_col_widths[2] = 86;
+    // Last column width must be 0
+    static int struct_col_widths[] = { 172, 151, 86, 0 }; // widths for each column
 
     int browser_h = 150;
     m_StructureSelectBrowser = m_StructureTabLayout.AddColResizeBrowser( struct_col_widths, 3, browser_h );
@@ -219,15 +215,8 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 430, 650, "FEA Me
     m_PartTabLayout.AddY( browser_h );
 
     // Pointer for the widths of each column in the browser to support resizing
-    int *part_col_widths = new int[6]; // 6 columns
-
-    // Initial column widths & keep the memory address
-    part_col_widths[0] = 86;
-    part_col_widths[1] = 65;
-    part_col_widths[2] = 43;
-    part_col_widths[3] = 86;
-    part_col_widths[4] = 43;
-    part_col_widths[5] = 86;
+    // Last column width must be 0
+    static int part_col_widths[] = { 86, 65, 43, 86, 43, 86, 0 }; // widths for each column
 
     m_FeaPartSelectBrowser = m_FeaPartBrowserLayout.AddColResizeBrowser( part_col_widths, 6, browser_h );
     m_FeaPartSelectBrowser->callback( staticScreenCB, this );
@@ -385,13 +374,8 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 430, 650, "FEA Me
     m_PropertyTabLayout.AddSubGroupLayout( m_PropertyEditGroup, m_PropertyTabLayout.GetW(), m_PropertyTabLayout.GetRemainY() );
 
     // Pointer for the widths of each column in the browser to support resizing
-    int *prop_col_widths = new int[4]; // 4 columns
-
-    // Initial column widths & keep the memory address
-    prop_col_widths[0] = 130;
-    prop_col_widths[1] = 70;
-    prop_col_widths[2] = 80;
-    prop_col_widths[3] = 130;
+    // Last column width must be 0
+    static int prop_col_widths[] = { 130, 70, 80, 130, 0 }; // widths for each column
 
     m_FeaPropertySelectBrowser = m_PropertyEditGroup.AddColResizeBrowser( prop_col_widths, 4, browser_h - 20 );
     m_FeaPropertySelectBrowser->callback( staticScreenCB, this );
@@ -861,7 +845,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 430, 650, "FEA Me
     m_LabelDelimChoice.AddItem( "Underscore" );
     m_LabelDelimChoice.AddItem( "Space" );
     m_LabelDelimChoice.AddItem( "None" );
-    m_OutputTabLayout.AddChoice( m_LabelDelimChoice, "Delimeter" );
+    m_OutputTabLayout.AddChoice( m_LabelDelimChoice, "Delimiter" );
 
     m_LenUnitChoice.AddItem( "MM" );
     m_LenUnitChoice.AddItem( "CM" );
@@ -979,6 +963,8 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 430, 650, "FEA Me
 
 StructScreen::~StructScreen()
 {
+    m_ConsoleDisplay->buffer( NULL );
+    delete m_ConsoleBuffer;
 }
 
 void StructScreen::LoadGeomChoice()
@@ -1034,6 +1020,7 @@ void StructScreen::UpdateStructBrowser()
 {
     //==== Structure Browser ====//
     int scroll_pos = m_StructureSelectBrowser->position();
+    int h_pos = m_StructureSelectBrowser->hposition();
     m_StructureSelectBrowser->clear();
 
     Vehicle* veh = m_ScreenMgr->GetVehiclePtr();
@@ -1077,12 +1064,14 @@ void StructScreen::UpdateStructBrowser()
     }
 
     m_StructureSelectBrowser->position( scroll_pos );
+    m_StructureSelectBrowser->hposition( h_pos );
 }
 
 void StructScreen::UpdateFeaPartBrowser()
 {
     //==== FeaPart Browser ====//
     int scroll_pos = m_FeaPartSelectBrowser->position();
+    int h_pos = m_FeaPartSelectBrowser->hposition();
     m_FeaPartSelectBrowser->clear();
 
     m_FeaPartSelectBrowser->column_char( ':' );
@@ -1212,6 +1201,7 @@ void StructScreen::UpdateFeaPartBrowser()
     }
 
     m_FeaPartSelectBrowser->position( scroll_pos );
+    m_FeaPartSelectBrowser->hposition( h_pos );
 }
 
 void StructScreen::UpdateDrawPartBrowser()
@@ -1341,6 +1331,7 @@ void StructScreen::UpdateFeaPropertyBrowser()
 {
     //==== FeaPart Browser ====//
     int scroll_pos = m_FeaPropertySelectBrowser->position();
+    int h_pos = m_FeaPropertySelectBrowser->hposition();
     m_FeaPropertySelectBrowser->clear();
 
     m_FeaPropertySelectBrowser->column_char( ':' );
@@ -1384,6 +1375,7 @@ void StructScreen::UpdateFeaPropertyBrowser()
     }
 
     m_FeaPropertySelectBrowser->position( scroll_pos );
+    m_FeaPropertySelectBrowser->hposition( h_pos );
 }
 
 void StructScreen::UpdateFeaPropertyChoice()
@@ -2542,9 +2534,9 @@ void StructScreen::GuiDeviceCallBack( GuiDevice* device )
     }
     else if ( device == &m_WikiLinkButton )
     {
-#ifdef  __APPLE__
+#if     defined(__APPLE__)
         system( "open http://www.openvsp.org/wiki/doku.php?id=feamesh" );
-#elif   WIN32
+#elif   defined(_WIN32) || defined(WIN32) 
         ShellExecute( NULL, "open", "http://www.openvsp.org/wiki/doku.php?id=feamesh",
                       NULL, NULL, SW_SHOWNORMAL );
 #else
@@ -2801,7 +2793,11 @@ void StructScreen::GuiDeviceCallBack( GuiDevice* device )
                     }
                 }
 
-                int first_selection = m_SelectedPartIndexVec[0];
+                int first_selection = -1;
+                if ( m_SelectedPartIndexVec.size() > 0 )
+                {
+                    first_selection = m_SelectedPartIndexVec[0];
+                }
 
                 while ( m_SelectedPartIndexVec.size() > 0 )
                 {
@@ -2824,11 +2820,14 @@ void StructScreen::GuiDeviceCallBack( GuiDevice* device )
                     m_SelectedPartIndexVec = temp_index_vec;
                 }
 
-                if ( structvec[StructureMgr.GetCurrStructIndex()]->ValidFeaPartInd( first_selection - 1 ) )
+                if ( first_selection != -1 )
                 {
-                    m_SelectedPartIndexVec.clear();
-                    m_SelectedPartIndexVec.push_back( first_selection - 1 );
-                    StructureMgr.SetCurrPartIndex( m_SelectedPartIndexVec[0] );
+                    if ( structvec[StructureMgr.GetCurrStructIndex()]->ValidFeaPartInd( first_selection - 1 ) )
+                    {
+                        m_SelectedPartIndexVec.clear();
+                        m_SelectedPartIndexVec.push_back( first_selection - 1 );
+                        StructureMgr.SetCurrPartIndex( m_SelectedPartIndexVec[0] );
+                    }
                 }
             }
         }

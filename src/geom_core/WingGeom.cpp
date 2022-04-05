@@ -615,6 +615,7 @@ WingSect::WingSect( XSecCurve *xsc ) : BlendWingSect( xsc)
     m_XDelta  = m_YDelta  = m_ZDelta  = 0;
     m_XRotate = m_YRotate = m_ZRotate = 0;
     m_XCenterRot = m_YCenterRot = m_ZCenterRot = 0;
+    m_ThickScale = 1.0;
 
     m_Aspect.Init( "Aspect", m_GroupName, this, 1.0, 0.001, 1000.0 );
     m_Aspect.SetDescript( "Aspect Ratio of Wing Section" );
@@ -648,6 +649,9 @@ WingSect::WingSect( XSecCurve *xsc ) : BlendWingSect( xsc)
     m_Dihedral.Init( "Dihedral", m_GroupName, this, 0.0, -360.0, 360.0 );
     m_Dihedral.SetDescript( "Dihedral of Wing Section" );
 
+    m_RotateMatchDiedralFlag.Init( "RotateMatchDideralFlag", m_GroupName, this, 0, 0, 1 );
+    m_RotateMatchDiedralFlag.SetDescript( "Rotate foil perpendicular to dihedral" );
+
     m_RootCluster.Init( "InCluster", m_GroupName, this, 1.0, 1e-4, 10.0 );
     m_RootCluster.SetDescript( "Inboard Tess Cluster Control" );
     m_TipCluster.Init( "OutCluster", m_GroupName, this, 1.0, 1e-4, 10.0 );
@@ -673,6 +677,8 @@ void WingSect::UpdateFromWing()
 
     VspCurve baseCurve = GetUntransformedCurve();
 
+    baseCurve.ScaleY( m_ThickScale );
+
     baseCurve.Transform( mat );
 
     //==== Apply Transform ====//
@@ -682,9 +688,9 @@ void WingSect::UpdateFromWing()
     tran_mat.translatef( m_XDelta, m_YDelta, m_ZDelta );
 
     Matrix4d rotate_mat;
-    rotate_mat.rotateX( m_XRotate );
-    rotate_mat.rotateY( m_YRotate );
-    rotate_mat.rotateZ( m_ZRotate );
+    rotate_mat.rotateZ( m_ZRotate );  // Not used
+    rotate_mat.rotateY( m_YRotate );  // Twist
+    rotate_mat.rotateX( m_XRotate );  // Dihedral
 
     Matrix4d cent_mat;
     cent_mat.translatef( -m_XCenterRot, -m_YCenterRot, -m_ZCenterRot );
@@ -708,7 +714,7 @@ void WingSect::UpdateFromWing()
 void WingSect::Update()
 {
     // Update() is empty because it only needs to be called from WingGeom::UpdateSurf().
-    // This empty method is left in place to keep all ohter callers happy.
+    // This empty method is left in place to keep all other callers happy.
 }
 
 //==== Copy position from base class ====//
@@ -940,7 +946,7 @@ void WingSect::ReadV2File( xmlNodePtr &sec_node )
         m_SweepLoc.Set( 1.0 );
     }
 
-    m_Twist = XmlUtil::FindDouble( sec_node, "Twist", m_Twist() );
+    m_Twist = -XmlUtil::FindDouble( sec_node, "Twist", m_Twist() );
     m_TwistLoc = XmlUtil::FindDouble( sec_node, "TwistLoc", m_TwistLoc() );
     m_Dihedral = XmlUtil::FindDouble( sec_node, "Dihedral", m_Dihedral() );
 
@@ -1227,8 +1233,6 @@ WingGeom::WingGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_Type.m_Name = "Wing";
     m_Type.m_Type = MS_WING_GEOM_TYPE;
 
-    m_ActiveXSec.SetLowerLimit( 1 );
-
     m_Closed = false;
 
     m_XSecSurf.SetParentContainer( GetID() );
@@ -1240,8 +1244,11 @@ WingGeom::WingGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_RelativeTwistFlag.Init("RelativeTwistFlag", m_Name, this, 0, 0, 1 );
     m_RelativeTwistFlag.SetDescript( "Relative or Absolute Twist" );
 
-    m_RotateAirfoilMatchDiedralFlag.Init("RotateAirfoilMatchDideralFlag", m_Name, this, 0, 0, 1 );
-    m_RotateAirfoilMatchDiedralFlag.SetDescript( "Rotate Airfoil To Stay Tangent To Dihedral (or Not)" );
+    m_RotateAirfoilMatchDiedralFlag.Init( "RotateAirfoilMatchDideralFlag", m_Name, this, 0, 0, 1 );
+    m_RotateAirfoilMatchDiedralFlag.SetDescript( "Rotate all foils perpendicular to dihedral" );
+
+    m_CorrectAirfoilThicknessFlag.Init( "CorrectAirfoilthicknessFlag", m_Name, this, 1, 0, 1 );
+    m_CorrectAirfoilThicknessFlag.SetDescript( "Scale airfoil thickness to correct for dihedral rotation" );
 
     m_TotalSpan.Init( "TotalSpan", m_Name, this, 1.0, 1e-6, 1000000.0 );
     m_TotalSpan.SetDescript( "Total Planform Span" );
@@ -1277,12 +1284,11 @@ WingGeom::WingGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_CapUMaxOption.SetDescript("Type of End Cap on Wing Tip");
     m_CapUMaxOption.Parm::Set(FLAT_END_CAP);
 
-    m_ActiveAirfoil.Init( "ActiveAirfoil", "Index", this, 0, 0, 1e6 );
+    m_ActiveWingSection.Init( "ActiveAirfoil", "Index", this, 1, 1, 1e6 );
 
     //==== Init Parms ====//
     m_TessU = 16;
     m_TessW = 31;
-    m_ActiveXSec = 1;
     m_SymPlanFlag = SYM_XZ;
 
     //==== Wing XSecs ====//
@@ -1315,9 +1321,31 @@ WingGeom::~WingGeom()
 
 void WingGeom::Update( bool fullupdate )
 {
-    m_ActiveAirfoil.SetUpperLimit( m_XSecSurf.NumXSec() - 1 );
+    m_ActiveWingSection.SetUpperLimit( m_XSecSurf.NumXSec() - 1 );
+
+    bool xform_dirty = m_XFormDirty; // Save value before it's reset in GeomXSec::Update
 
     GeomXSec::Update( fullupdate );
+
+    // Update so that m_XFormDirty (symmetry) causes total parameters to update. 
+    // This should be called after Geom::Update to avoid triggering an additional 
+    // m_SurfDirty update after the m_XForDirty update
+    if ( xform_dirty )
+    {
+        UpdateTotalParameters();
+    }
+}
+
+//==== Update Total Span, Area, etc. =====//
+void WingGeom::UpdateTotalParameters()
+{
+    //==== Load Totals ====//
+    m_TotalSpan = ComputeTotalSpan();
+    m_TotalProjSpan = ComputeTotalProjSpan();
+    m_TotalChord = ComputeTotalChord();
+    m_TotalArea = ComputeTotalArea();
+
+    m_TotalAR = m_TotalProjSpan() * m_TotalProjSpan() / m_TotalArea();
 }
 
 //==== Change IDs =====//
@@ -1441,13 +1469,6 @@ void WingGeom::AddDefaultSources( double base_len )
     }
 }
 
-//==== Drag Parameters ====//
-void WingGeom::LoadDragFactors( DragFactors& drag_factors )
-{
-
-
-}
-
 //==== Encode Data Into XML Data Struct ====//
 xmlNodePtr WingGeom::EncodeXml( xmlNodePtr & node )
 {
@@ -1487,26 +1508,6 @@ void WingGeom::ComputeCenter()
     }
 }
 
-//==== Set Active XSec Type ====//
-void WingGeom::SetActiveAirfoilType( int type )
-{
-    XSec* xs = GetXSec( m_ActiveAirfoil() );
-
-    if ( !xs )
-    {
-        return;
-    }
-
-    if ( type == xs->GetXSecCurve()->GetType() )
-    {
-        return;
-    }
-
-    m_XSecSurf.ChangeXSecShape( m_ActiveAirfoil(), type );
-
-    Update();
-}
-
 
 bool WingGeom::IsClosed() const
 {
@@ -1527,7 +1528,7 @@ WingSect* WingGeom::GetWingSect( int index )
 //==== Override Geom Cut/Copy/Insert/Paste ====//
 void WingGeom::CutXSec( int index )
 {
-    m_ActiveXSec = index;
+    m_ActiveWingSection = index;
     CutWingSect( index );
 }
 void WingGeom::CopyXSec( int index )
@@ -1543,8 +1544,8 @@ void WingGeom::InsertXSec( int index, int type )
     if ( index > 0 && index < m_XSecSurf.NumXSec() )
     {
         string ins_id = m_XSecSurf.InsertXSec(type, index);
-        m_ActiveXSec = index + 1;
-        PasteWingSect( m_ActiveXSec() );
+        m_ActiveWingSection = index + 1;
+        PasteWingSect( m_ActiveWingSection() );
     }
 }
 
@@ -1652,8 +1653,8 @@ void WingGeom::InsertWingSect( int index  )
         int type = xs->GetXSecCurve()->GetType();
 
         string ins_id = m_XSecSurf.InsertXSec(type, index);
-        m_ActiveXSec = index + 1;
-        PasteWingSect( m_ActiveXSec() );
+        m_ActiveWingSection = index + 1;
+        PasteWingSect( m_ActiveWingSection() );
     }
 }
 
@@ -1686,18 +1687,18 @@ void WingGeom::UpdateSurf()
         total_change_flag = true;
     }
 
-    int active_sect = m_ActiveXSec();     // Save Active Section
+    int active_sect = m_ActiveWingSection();     // Save Active Section
 
     //==== Set Temp Active XSec Based On Updated Parms ====//
     if ( total_change_flag )
-        m_ActiveXSec = 1;
+        m_ActiveWingSection = 1;
     else
         SetTempActiveXSec();
 
     //==== Make Sure Chord Match For Adjacent Wing Sections ====//
     MatchWingSections();
 
-    m_ActiveXSec = active_sect;            // Restore Active Section
+    m_ActiveWingSection = active_sect;            // Restore Active Section
 
 
     // clear the u tessellation vector
@@ -1717,6 +1718,8 @@ void WingGeom::UpdateSurf()
     double total_sweep_offset = 0.0;
     double total_dihed_offset = 0.0;
     double total_twist = 0.0;
+
+    double previous_dihead_rot = 0.0;
 
     //==== Load End Points for Each Section ====//
     for ( int i = 0 ; i < nxsec ; i++ )
@@ -1787,12 +1790,12 @@ void WingGeom::UpdateSurf()
                     else if ( rect )
                     {
                         double h = xsc->GetHeight();
-                        double r = rect->m_Radius();
+                        double r = rect->m_RadiusTR();
                         xsc->SetWidthHeight( 1.0, h/w );
-                        rect->m_Radius = r / w;
+                        rect->m_RadiusTR = r / w;
                         utc = ws->GetUntransformedCurve();
                         xsc->SetWidthHeight( w, h );
-                        rect->m_Radius = r;
+                        rect->m_RadiusTR = r;
                     }
                     else
                     {
@@ -1809,8 +1812,18 @@ void WingGeom::UpdateSurf()
             }
             untransformed_crv_vec[i] = utc;
 
-            double dihead_rot = 0.0;
             if ( m_RotateAirfoilMatchDiedralFlag() )
+            {
+                ws->m_RotateMatchDiedralFlag.Deactivate();
+            }
+            else
+            {
+                ws->m_RotateMatchDiedralFlag.Activate();
+            }
+
+            double dihead_rot = 0.0;
+            double foil_scale = 1.0;
+            if ( m_RotateAirfoilMatchDiedralFlag() || ws->m_RotateMatchDiedralFlag() )
             {
                 if ( i == 0 )
                 {
@@ -1824,7 +1837,19 @@ void WingGeom::UpdateSurf()
                 {
                     dihead_rot = 0.5*( GetSumDihedral( i ) + GetSumDihedral( i+1 ) );
                 }
+
+
+                if ( m_CorrectAirfoilThicknessFlag() )
+                {
+                    if ( i != 0 && i !=  ( m_XSecSurf.NumXSec() - 1 ) ) // Not first or last foils.
+                    {
+                        foil_scale = 1.0 / cos( ( dihead_rot - previous_dihead_rot ) * DEG_2_RAD );
+                    }
+                }
             }
+            previous_dihead_rot = dihead_rot;
+
+            ws->m_ThickScale = foil_scale;
 
             //==== Load Transformations =====//
             ws->m_YDelta = total_span;
@@ -2088,12 +2113,7 @@ void WingGeom::UpdateSurf()
     m_MainSurfVec[0].SetFoilSurf( &m_FoilSurf );
 
     //==== Load Totals ====//
-    m_TotalSpan = ComputeTotalSpan();
-    m_TotalProjSpan = ComputeTotalProjSpan();
-    m_TotalChord = ComputeTotalChord();
-    m_TotalArea = ComputeTotalArea();
-
-    m_TotalAR = m_TotalProjSpan() * m_TotalProjSpan() / m_TotalArea() ;
+    UpdateTotalParameters();
 }
 
 void WingGeom::CalculateMeshMetrics()
@@ -2179,8 +2199,8 @@ void WingGeom::CalculateMeshMetrics()
     m_MaxGrowth = maxrat;
 }
 
-void WingGeom::UpdateTesselate( vector<VspSurf> &surf_vec, int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms,
-                                vector< vector< vec3d > > &uw_pnts, bool degen )
+void WingGeom::UpdateTesselate( const vector<VspSurf> &surf_vec, int indx, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms,
+                                vector< vector< vec3d > > &uw_pnts, bool degen ) const
 {
     vector < int > tessvec;
     vector < double > rootc;
@@ -2215,7 +2235,7 @@ void WingGeom::UpdateTesselate( vector<VspSurf> &surf_vec, int indx, vector< vec
     surf_vec[indx].Tesselate( tessvec, m_TessW(), pnts, norms, uw_pnts, m_CapUMinTess(), degen, umerge );
 }
 
-void WingGeom::UpdateSplitTesselate( vector<VspSurf> &surf_vec, int indx, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms )
+void WingGeom::UpdateSplitTesselate( const vector<VspSurf> &surf_vec, int indx, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms ) const
 {
     vector < int > tessvec;
     vector < double > rootc;
@@ -2252,6 +2272,10 @@ void WingGeom::UpdateSplitTesselate( vector<VspSurf> &surf_vec, int indx, vector
 
 void WingGeom::UpdatePreTess()
 {
+    // Update clustering before symmetry is applied for m_SurfVec
+    m_FoilSurf.SetClustering( m_LECluster(), m_TECluster() );
+    m_MainSurfVec[0].SetClustering( m_LECluster(), m_TECluster() );
+
     m_TessUVec.clear();
     m_RootClusterVec.clear();
     m_TipClusterVec.clear();
@@ -2272,9 +2296,6 @@ void WingGeom::UpdatePreTess()
             }
         }
     }
-
-    m_FoilSurf.SetClustering( m_LECluster(), m_TECluster() );
-    m_MainSurfVec[0].SetClustering( m_LECluster(), m_TECluster() );
 
     CalculateMeshMetrics();
 }
@@ -2300,17 +2321,28 @@ void WingGeom::UpdateDrawObj()
         m_XSecDrawObj_vec[i].m_PntVec = m_XSecSurf.FindXSec( i )->GetDrawLines( relTrans );
         m_XSecDrawObj_vec[i].m_GeomChanged = true;
     }
+}
 
-    m_HighlightXSecDrawObj.m_PntVec = m_XSecSurf.FindXSec( m_ActiveAirfoil() )->GetDrawLines( relTrans );
+void WingGeom::UpdateHighlightDrawObj()
+{
+    Matrix4d attachMat;
+    Matrix4d relTrans;
+    attachMat = ComposeAttachMatrix();
+    relTrans = attachMat;
+    relTrans.affineInverse();
+    relTrans.matMult( m_ModelMatrix.data() );
+    relTrans.postMult( attachMat.data() );
+
+    m_HighlightXSecDrawObj.m_PntVec = m_XSecSurf.FindXSec( m_ActiveXSec() )->GetDrawLines( relTrans );
     m_HighlightXSecDrawObj.m_GeomChanged = true;
 
-    double w = m_XSecSurf.FindXSec( m_ActiveAirfoil() )->GetXSecCurve()->GetWidth();
+    double w = m_XSecSurf.FindXSec( m_ActiveXSec() )->GetXSecCurve()->GetWidth();
 
     Matrix4d mat;
     m_XSecSurf.GetBasicTransformation( Z_DIR, X_DIR, XS_SHIFT_MID, false, 1.0, mat );
     mat.scale( 1.0/w );
 
-    VspCurve crv = m_XSecSurf.FindXSec( m_ActiveAirfoil() )->GetUntransformedCurve();
+    VspCurve crv = m_XSecSurf.FindXSec( m_ActiveXSec() )->GetUntransformedCurve();
     crv.Transform( mat );
 
     vector< vec3d > pts;
@@ -2323,10 +2355,10 @@ void WingGeom::UpdateDrawObj()
     m_CurrentXSecDrawObj.m_GeomChanged = true;
 
 
-    VspCurve inbd = m_XSecSurf.FindXSec( m_ActiveXSec() - 1 )->GetCurve();
+    VspCurve inbd = m_XSecSurf.FindXSec( m_ActiveWingSection() - 1 )->GetCurve(); // FIXME: Crash when loading a model
     inbd.Transform( relTrans );
 
-    VspCurve outbd = m_XSecSurf.FindXSec( m_ActiveXSec() )->GetCurve();
+    VspCurve outbd = m_XSecSurf.FindXSec( m_ActiveWingSection() )->GetCurve();
     outbd.Transform( relTrans );
 
     BndBox iBBox, oBBox;
@@ -2335,7 +2367,6 @@ void WingGeom::UpdateDrawObj()
     oBBox.Update( iBBox );
 
     m_HighlightWingSecDrawObj.m_PntVec = oBBox.GetBBoxDrawLines();
-
 }
 
 void WingGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
@@ -2396,7 +2427,7 @@ double WingGeom::ComputeTotalProjSpan()
     vector< WingSect* > ws_vec = GetWingSectVec();
     for ( int i = 1 ; i < (int)ws_vec.size() ; i++ )
     {
-            ts += ws_vec[i]->m_Span()*cos( ws_vec[i]->m_Dihedral() * DEG_2_RAD);
+            ts += ws_vec[i]->m_Span()*cos( GetSumDihedral( i ) * DEG_2_RAD);
     }
 
     if ( GetSymFlag() != 0 )
@@ -2537,21 +2568,21 @@ void WingGeom::UpdateTotalArea()
 void WingGeom::MatchWingSections()
 {
     //==== Match Section Root/Tip ====//
-    WingSect* active_ws = ( WingSect* ) m_XSecSurf.FindXSec( m_ActiveXSec() );
+    WingSect* active_ws = ( WingSect* ) m_XSecSurf.FindXSec( m_ActiveWingSection() );
     if ( active_ws )
     {
         active_ws->m_DriverGroup.UpdateGroup( active_ws->GetDriverParms() );
         double active_rc = active_ws->m_RootChord();
         double active_tc = active_ws->m_TipChord();
 
-        if ( m_ActiveXSec() > 0 )
+        if ( m_ActiveWingSection() > 0 )
         {
-            WingSect* inboard_ws = ( WingSect* ) m_XSecSurf.FindXSec( m_ActiveXSec()-1 );
+            WingSect* inboard_ws = ( WingSect* ) m_XSecSurf.FindXSec( m_ActiveWingSection()-1 );
             inboard_ws->ForceChordVal( active_rc, false );
         }
-        if ( m_ActiveXSec() < m_XSecSurf.NumXSec()-1 )
+        if ( m_ActiveWingSection() < m_XSecSurf.NumXSec()-1 )
         {
-            WingSect* outboard_ws = ( WingSect* ) m_XSecSurf.FindXSec( m_ActiveXSec()+1 );
+            WingSect* outboard_ws = ( WingSect* ) m_XSecSurf.FindXSec( m_ActiveWingSection()+1 );
             outboard_ws->ForceChordVal( active_tc, true );
         }
     }
@@ -2575,7 +2606,7 @@ void WingGeom::SetTempActiveXSec()
     }
 
     if ( active_sect_index >= 0 )
-        m_ActiveXSec = active_sect_index;
+        m_ActiveWingSection = active_sect_index;
 }
 
 //==== Get Sum Dihedral ====//

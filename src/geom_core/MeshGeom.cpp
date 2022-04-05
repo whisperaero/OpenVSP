@@ -23,7 +23,7 @@
 #include "StlHelper.h"
 
 #include "SubSurfaceMgr.h"
-#include "Util.h"
+#include "VspUtil.h"
 
 //==== Constructor =====//
 MeshGeom::MeshGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
@@ -162,7 +162,7 @@ xmlNodePtr MeshGeom::DecodeXml( xmlNodePtr & node )
 int MeshGeom::ReadXSec( const char* file_name )
 {
     FILE *fp;
-    char str[256];
+    char str[256] = {};
 
     //==== Make Sure File Exists ====//
     if ( ( fp = fopen( file_name, "r" ) ) == ( FILE * )NULL )
@@ -620,77 +620,61 @@ int MeshGeom::ReadTriFile( const char * file_name )
     return 1;
 }
 
-//==== Build Indexed Mesh ====//
-void MeshGeom::BuildIndexedMesh( int partOffset )
+void MeshGeom::InitIndexedMesh( const vector < TMesh* > &meshvec, int & offset )
 {
-    int m, s, t;
+    //==== Find All Exterior and Split Tris =====//
+    for ( int m = 0 ; m < meshvec.size() ; m++ )
+    {
+        for ( int t = 0 ; t < ( int )meshvec[m]->m_TVec.size() ; t++ )
+        {
+            TTri* tri = meshvec[m]->m_TVec[t];
+            if ( tri->m_SplitVec.size() )
+            {
+                for ( int s = 0 ; s < ( int )tri->m_SplitVec.size() ; s++ )
+                {
+                    if ( !tri->m_SplitVec[s]->m_IgnoreTriFlag )
+                    {
+                        char str[80];
+                        sprintf( str, "%d", offset );
+                        tri->m_SplitVec[s]->m_ID = string( str );
+                        m_IndexedTriVec.push_back( tri->m_SplitVec[s] );
+                    }
+                }
+            }
+            else if ( !tri->m_IgnoreTriFlag )
+            {
+                char str[80];
+                sprintf( str, "%d", offset );
+                tri->m_ID = string( str );
+                m_IndexedTriVec.push_back( tri );
+            }
+        }
+        offset++;
+    }
+}
 
+//==== Build Indexed Mesh ====//
+void MeshGeom::BuildIndexedMesh( int partOffset, bool half_flag )
+{
     m_IndexedTriVec.clear();
     m_IndexedNodeVec.clear();
 
-    int mTMesh = (int) m_TMeshVec.size();
+    partOffset++;
 
-    //==== Find All Exterior and Split Tris =====//
-    for ( m = 0 ; m < mTMesh ; m++ )
+    if ( m_ViewMeshFlag() )
     {
-        for ( t = 0 ; t < ( int )m_TMeshVec[m]->m_TVec.size() ; t++ )
-        {
-            TTri* tri = m_TMeshVec[m]->m_TVec[t];
-            if ( tri->m_SplitVec.size() )
-            {
-                for ( s = 0 ; s < ( int )tri->m_SplitVec.size() ; s++ )
-                {
-                    if ( !tri->m_SplitVec[s]->m_IgnoreTriFlag )
-                    {
-                        char str[80];
-                        sprintf( str, "%d", partOffset + m + 1 );
-                        tri->m_SplitVec[s]->m_ID = string( str );
-                        m_IndexedTriVec.push_back( tri->m_SplitVec[s] );
-                    }
-                }
-            }
-            else if ( !tri->m_IgnoreTriFlag )
-            {
-                char str[80];
-                sprintf( str, "%d", partOffset + m + 1 );
-                tri->m_ID = string( str );
-                m_IndexedTriVec.push_back( tri );
-            }
-        }
+        InitIndexedMesh( m_TMeshVec, partOffset );
     }
 
-    for ( m = 0; m < m_SliceVec.size(); m++ )
+    if ( m_ViewSliceFlag() )
     {
-        for ( t = 0 ; t < ( int )m_SliceVec[m]->m_TVec.size() ; t++ )
-        {
-            TTri* tri = m_SliceVec[m]->m_TVec[t];
-            if ( tri->m_SplitVec.size() )
-            {
-                for ( s = 0 ; s < ( int )tri->m_SplitVec.size() ; s++ )
-                {
-                    if ( !tri->m_SplitVec[s]->m_IgnoreTriFlag )
-                    {
-                        char str[80];
-                        sprintf( str, "%d", partOffset + m + 1 + mTMesh );
-                        tri->m_SplitVec[s]->m_ID = string( str );
-                        m_IndexedTriVec.push_back( tri->m_SplitVec[s] );
-                    }
-                }
-            }
-            else if ( !tri->m_IgnoreTriFlag )
-            {
-                char str[80];
-                sprintf( str, "%d", partOffset + m + 1 + mTMesh );
-                tri->m_ID = string( str );
-                m_IndexedTriVec.push_back( tri );
-            }
-        }
+        InitIndexedMesh( m_SliceVec, partOffset );
     }
 
     //==== Collect All Points ====//
     vector< TNode* > allNodeVec;
     allNodeVec.reserve( m_IndexedTriVec.size() * 3 );
-    for ( t = 0 ; t < ( int )m_IndexedTriVec.size() ; t++ )
+    for ( int t = 0 ; t < ( int )m_IndexedTriVec.size() ; t++ )
     {
         m_IndexedTriVec[t]->m_N0->m_ID = ( int )allNodeVec.size();
         allNodeVec.push_back( m_IndexedTriVec[t]->m_N0 );
@@ -741,7 +725,7 @@ void MeshGeom::BuildIndexedMesh( int partOffset )
     vector< TTri* > goodTriVec;
     goodTriVec.reserve( m_IndexedTriVec.size() );
     //==== Write Out Tris ====//
-    for ( t = 0 ; t < ( int )m_IndexedTriVec.size() ; t++ )
+    for ( int t = 0 ; t < ( int )m_IndexedTriVec.size() ; t++ )
     {
         TTri* ttri = m_IndexedTriVec[t];
         if( ttri )
@@ -750,6 +734,12 @@ void MeshGeom::BuildIndexedMesh( int partOffset )
                     ttri->m_N0->m_ID != ttri->m_N2->m_ID &&
                     ttri->m_N1->m_ID != ttri->m_N2->m_ID )
             {
+                if ( half_flag && ( ( ( ttri->m_N0->GetXYZPnt() + ttri->m_N1->GetXYZPnt() + ttri->m_N2->GetXYZPnt() ) / 3. ).y() < 0 ) )
+                {
+                    // Don't keep tris with enter with -Y component
+                    continue;
+                }
+
                 goodTriVec.push_back( ttri );
             }
         }
@@ -1051,8 +1041,8 @@ int MeshGeom::WriteVSPGeomParts( FILE* file_id  )
 }
 
 // Wake edges are created such that N0.u < N1.u.
-// This comparitor sorts first by sgn(N0.y), abs(N0.y), then N0.u and N1.u.
-bool OrderWakeEdges ( TEdge &a, TEdge &b )
+// This comparator sorts first by sgn(N0.y), abs(N0.y), then N0.u and N1.u.
+bool OrderWakeEdges ( const TEdge &a, const TEdge &b )
 {
     if ( sgn( a.m_N0->m_Pnt.y() ) < sgn( b.m_N0->m_Pnt.y() ) ) return true;
     if ( sgn( b.m_N0->m_Pnt.y() ) < sgn( a.m_N0->m_Pnt.y() ) ) return false;
@@ -1098,7 +1088,7 @@ bool AboutEqualWakeNodes ( TNode *a, TNode *b )
     return false;
 }
 
-bool AboutEqualWakeEdges ( TEdge &a, TEdge &b )
+bool AboutEqualWakeEdges ( const TEdge &a, const TEdge &b )
 {
     if ( AboutEqualWakeNodes( a.m_N0, b.m_N0 )
       && AboutEqualWakeNodes( a.m_N1, b.m_N1 ) ) return true;
@@ -1778,7 +1768,7 @@ void MeshGeom::ApplyScale()
     m_LastScale = m_Scale();
 }
 
-void MeshGeom::TransformMeshVec( vector<TMesh*> & meshVec, Matrix4d & TransMat )
+void MeshGeom::TransformMeshVec( vector<TMesh*> & meshVec, const Matrix4d & TransMat ) const
 {
     // Build Map of nodes
     map< TNode*, int > nodeMap;
@@ -2093,7 +2083,13 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int ha
             double perWetVol = m_TMeshVec[i]->m_GuessVol / guessTotalWetVol;
             m_TMeshVec[i]->m_WetVol += perWetVol * ( leftOver );
 
-            if ( m_TMeshVec[i]->m_WetVol > m_TMeshVec[i]->m_TheoVol )
+            int neg_vol_mult = 1; // Negative volume multiplier
+            if ( m_TMeshVec[i]->m_SurfCfdType == vsp::CFD_NEGATIVE )
+            {
+                neg_vol_mult = -1;
+            }
+
+            if ( neg_vol_mult * m_TMeshVec[i]->m_WetVol > neg_vol_mult * m_TMeshVec[i]->m_TheoVol )
             {
                 m_TMeshVec[i]->m_WetVol = m_TMeshVec[i]->m_TheoVol;
             }
@@ -2200,16 +2196,6 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int ha
         vector< double > wet_area_vec;
         vector< double > theo_vol_vec;
         vector< double > wet_vol_vec;
-        vector< double > min_chord;
-        vector< double > avg_chord;
-        vector< double > max_chord;
-        vector< double > min_tc;
-        vector< double > avg_tc;
-        vector< double > max_tc;
-        vector< double > avg_sweep;
-        vector< double > length;
-        vector< double > max_area;
-        vector< double > length_dia;
 
         res->Add( NameValData( "Num_Meshes", ( int )m_TMeshVec.size() ) );
         for ( i = 0 ; i < ( int )m_TMeshVec.size() ; i++ )
@@ -2220,16 +2206,6 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int ha
             wet_area_vec.push_back( tmsh->m_WetArea );
             theo_vol_vec.push_back( tmsh->m_TheoVol );
             wet_vol_vec.push_back( tmsh->m_WetVol );
-            min_chord.push_back( tmsh->m_DragFactors.m_MinChord );
-            avg_chord.push_back( tmsh->m_DragFactors.m_AvgChord );
-            max_chord.push_back( tmsh->m_DragFactors.m_MaxChord );
-            min_tc.push_back( tmsh->m_DragFactors.m_MinThickToChord );
-            avg_tc.push_back( tmsh->m_DragFactors.m_AvgThickToChord );
-            max_tc.push_back( tmsh->m_DragFactors.m_MaxThickToChord );
-            avg_sweep.push_back( tmsh->m_DragFactors.m_AvgSweep );
-            length.push_back( tmsh->m_DragFactors.m_Length );
-            max_area.push_back( tmsh->m_DragFactors.m_MaxXSecArea );
-            length_dia.push_back( tmsh->m_DragFactors.m_LengthToDia );
         }
 
         res->Add( NameValData( "Comp_Name", name_vec ) );
@@ -2249,19 +2225,6 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int ha
         res->Add( NameValData( "Total_Theo_Vol", m_TotalTheoVol ) );
         res->Add( NameValData( "Total_Wet_Vol", m_TotalWetVol ) );
 
-        res->Add( NameValData( "Min_Chord", min_chord ) );
-        res->Add( NameValData( "Avg_Chord", avg_chord ) );
-        res->Add( NameValData( "Max_Chord", max_chord ) );
-
-        res->Add( NameValData( "Min_TC", min_tc ) );
-        res->Add( NameValData( "Avg_TC", avg_tc ) );
-        res->Add( NameValData( "Max_TC", max_tc ) );
-
-        res->Add( NameValData( "Avg_Sweep", avg_sweep ) );
-        res->Add( NameValData( "Length", length ) );
-        res->Add( NameValData( "Max_Area", max_area ) );
-        res->Add( NameValData( "Length_Dia", length_dia ) );
-
         res->Add( NameValData( "Num_Degen_Tris_Removed", info.m_NumDegenerateTriDeleted ) );
         res->Add( NameValData( "Num_Open_Meshes_Removed", info.m_NumOpenMeshedDeleted ) );
         res->Add( NameValData( "Num_Open_Meshes_Merged", info.m_NumOpenMeshesMerged ) );
@@ -2276,13 +2239,6 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int ha
         {
             string csvfn = m_Vehicle->getExportFileName( vsp::COMP_GEOM_CSV_TYPE );
             res->WriteCompGeomCsvFile( csvfn );
-        }
-
-        //==== Write Drag BuildUp File ====//
-        if ( m_Vehicle->getExportDragBuildTsvFile() )
-        {
-            string tsvfn = m_Vehicle->getExportFileName( vsp::DRAG_BUILD_TSV_TYPE );
-            res->WriteDragBuildFile( tsvfn );
         }
 
     }
@@ -2333,7 +2289,7 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
     vec3d tvec = cross( norm_axis, pnt );
     tvec.normalize();
     Matrix4d transMat;
-    double tempMat[16];
+    double tempMat[16] = {};
     tempMat[0] = norm_axis.x();
     tempMat[4] = norm_axis.y();
     tempMat[8] = norm_axis.z();
@@ -2358,7 +2314,7 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
 
     //==== Check For Open Meshes and Merge or Delete Them ====//
     MeshInfo info;
-    MergeRemoveOpenMeshes( &info );
+    MergeRemoveOpenMeshes( &info, false );
 
     //==== Create Results ====//
     Results* res = ResultsMgr.CreateResults( "Slice" );
@@ -2410,7 +2366,6 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
         b.Update( m_TMeshVec[i]->m_TBox.m_Box );
     }
     m_BBox = b;
-    //update_xformed_bbox();            // Load Xform BBox
 
     double xMin;
     double xMax;
@@ -2425,15 +2380,15 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
         xMax = end + 0.0001;
     }
 
-    //==== Build Slice Mesh Object =====//
-    // MJW: Mandating 3 slices is a preference. 2 is just fine, and sometimes necessary.
-    //if ( numSlices < 3 )
-    //{
-        //numSlices = 3;
-    //}
-
     vec3d norm( 1, 0, 0 );
 
+    double dxSlice = 1.0;
+    if ( numSlices > 1 )
+    {
+        dxSlice = ( xMax - xMin ) / ( double )( numSlices - 1 );
+    }
+
+    vector< double > loc_vec;
     for ( s = 0 ; s < numSlices ; s++ )
     {
         TMesh* tm = new TMesh();
@@ -2442,7 +2397,8 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
         tm->m_ThickSurf = false;
         tm->m_SurfCfdType = vsp::CFD_STRUCTURE;
 
-        double x = xMin + ( ( double )s / ( double )( numSlices - 1 ) ) * ( xMax - xMin );
+        double x = xMin + ( double )s * dxSlice;
+        loc_vec.push_back( x );
 
         double ydel = 1.02 * ( m_BBox.GetMax( 1 ) - m_BBox.GetMin( 1 ) );
         double ys   = m_BBox.GetMin( 1 ) - 0.01 * ydel;
@@ -2509,14 +2465,11 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
 
     TransMat.affineInverse();
 
-    vector< double > loc_vec;
     vector< double > area_vec;
     vector < vec3d > AreaCenter;
     for ( s = 0 ; s < ( int )m_SliceVec.size() ; s++ )
     {
-        double x = xMin + ( ( double )s / ( double )( numSlices - 1 ) ) * ( xMax - xMin );
         m_SliceVec[s]->ComputeWetArea();
-        loc_vec.push_back( x );
         area_vec.push_back( m_SliceVec[s]->m_WetArea );
         AreaCenter.push_back( TransMat.xform( m_SliceVec[s]->m_AreaCenter ) );
     }
@@ -2528,7 +2481,7 @@ void MeshGeom::AreaSlice( int numSlices , vec3d norm_axis,
     string filename = m_Vehicle->getExportFileName( vsp::SLICE_TXT_TYPE );
     res->WriteSliceFile( filename );
 
-    //==== TransForm Slices and Mesh to Match Orignal Coord Sys ====//
+    //==== TransForm Slices and Mesh to Match Original Coord Sys ====//
     TransformMeshVec( m_SliceVec, TransMat );
     TransformMeshVec( m_TMeshVec, TransMat );
 }
@@ -2610,7 +2563,7 @@ void MeshGeom::WaveDragSlice( int numSlices, double sliceAngle, int coneSections
         tubeend = endX_global + tubedist * 1.1;
     }
 
-    //==== Flow-Through Accomodation Routine ====//
+    //==== Flow-Through Accommodation Routine ====//
     // Extends designated subsurfaces outside slicing range (flow-through stream tubes)
 
     // Make TMesh* vector for the tubes connecting translated subsurfaces to their parent components
@@ -4208,7 +4161,7 @@ void MeshGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview )
     }
 }
 
-vector<TMesh*> MeshGeom::CreateTMeshVec()
+vector<TMesh*> MeshGeom::CreateTMeshVec() const
 {
     vector<TMesh*> retTMeshVec;
     retTMeshVec.resize( m_TMeshVec.size() );
@@ -4255,11 +4208,11 @@ void MeshGeom::FlattenSliceVec()
 }
 
 //==== Get Total Transformation Matrix from Original Points ====//
-Matrix4d MeshGeom::GetTotalTransMat()
+Matrix4d MeshGeom::GetTotalTransMat() const
 {
     Matrix4d retMat;
-    retMat.initMat( m_ScaleMatrix.data() );
-    retMat.postMult( m_ModelMatrix.data() );
+    retMat.initMat( m_ScaleMatrix );
+    retMat.postMult( m_ModelMatrix );
 
     return retMat;
 }
@@ -4298,7 +4251,7 @@ set < string > MeshGeom::GetTMeshPtrIDs()
     return ids;
 }
 
-//==== Subtag All Trianlges ====//
+//==== Subtag All Triangles ====//
 void MeshGeom::SubTagTris( bool tag_subs )
 {
     // Clear out the current Subtag Maps
