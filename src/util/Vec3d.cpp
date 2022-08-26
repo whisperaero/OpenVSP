@@ -564,7 +564,7 @@ double dist_pnt_2_line( const vec3d& line_pt1, const vec3d& line_pt2, const vec3
 
     double denom = C_B.mag();
 
-    if ( denom < 0.0 )
+    if ( denom < DBL_EPSILON )
     {
         return( A_B.mag() );
     }
@@ -705,6 +705,20 @@ vec3d proj_pnt_to_plane( vec3d& org, vec3d& plane_ln1, vec3d& plane_ln2, vec3d& 
 
     return( pnt + proj_vec );
 
+}
+
+vec3d proj_vec_to_plane( const vec3d& vec, const vec3d& norm )
+{
+    double ca = cos_angle( vec, norm );
+
+    if ( std::abs( ca ) == 1.0 )
+    {
+        return vec3d();
+    }
+
+    vec3d along = ca * norm;
+
+    return vec - along;
 }
 
 //******* Find The Point On Line AB nearest to Line CD******//

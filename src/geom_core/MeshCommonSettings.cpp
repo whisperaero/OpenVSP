@@ -49,6 +49,12 @@ void MeshCommonSettings::InitCommonParms()
     m_CubicSurfTolerance.Init( "CubicSurfTolerance", "Global", this, 1e-6, 1e-12, 1e12 );
     m_CubicSurfTolerance.SetDescript( "Tolerance Used When Demoting Higher Order Surfaces to Cubic" );
 
+    m_ConvertToQuadsFlag.Init( "ConvertToQuadsFlag", "Global", this, false, false, true );
+    m_ConvertToQuadsFlag.SetDescript( "Flag to convert mesh to quads" );
+
+    m_HighOrderElementFlag.Init( "HighOrderElementFlag", "Global", this, false, false, true );
+    m_HighOrderElementFlag.SetDescript( "Flag to promote to high order elements" );
+
     m_FarCompFlag.Init( "FarComp", "FarField", this, false, 0, 1 );
     m_FarMeshFlag.Init( "FarMesh", "FarField", this, false, 0, 1 );
     m_HalfMeshFlag.Init( "HalfMesh", "FarField", this, false, 0, 1 );
@@ -413,6 +419,10 @@ StructSettings::StructSettings() : MeshCommonSettings()
     m_Name = "StructSettings";
 
     InitCommonParms();
+    // Convert to quads should default to ON for structures.
+    m_ConvertToQuadsFlag.Set( true );
+    // High order elements should default to ON for structures.
+    m_HighOrderElementFlag.Set( true );
 
     m_ExportFileFlags[ vsp::FEA_MASS_FILE_NAME ].Init( "MASS_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::FEA_NASTRAN_FILE_NAME ].Init( "NASTRAN_Export", "ExportFEA", this, true, 0, 1 );
@@ -463,6 +473,12 @@ StructSettings::StructSettings() : MeshCommonSettings()
 
     m_DrawElementOrientVecFlag.Init( "DrawElementOrientVecFlag", "StructSettings", this, false, false, true );
     m_DrawElementOrientVecFlag.SetDescript( "Flag to Draw FeaElement Orientation Vectors" );
+
+    m_NodeOffset.Init( "NodeOffset", "StructSettings", this, 0, 0, 1e12 );
+    m_NodeOffset.SetDescript( "Offset to add to FEA node ID's for this structure" );
+
+    m_ElementOffset.Init( "ElementOffset", "StructSettings", this, 0, 0, 1e12 );
+    m_ElementOffset.SetDescript( "Offset to add to FEA element ID's for this structure" );
 
     ResetExportFileNames();
 }
@@ -521,7 +537,7 @@ void StructSettings::ResetExportFileNames()
 void StructSettings::ResetExportFileNames( const string& basename )
 {
     int pos;
-    const char *suffix[] = {"_mass.txt", "_NASTRAN.dat", "_NASTRAN.nkey", "_calculix.dat", ".stl", ".msh", ".srf", ".curv", ".p3d", ".igs", ".stp" };
+    const char *suffix[] = {"_mass.txt", "_NASTRAN.dat", "_NASTRAN.nkey", "_calculix.inp", ".stl", ".msh", ".srf", ".curv", ".p3d", ".igs", ".stp" };
 
     for ( int i = 0 ; i < vsp::FEA_NUM_FILE_NAMES; i++ )
     {

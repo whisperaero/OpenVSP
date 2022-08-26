@@ -95,6 +95,9 @@ public:
     BoolParm m_DemoteSurfsCubicFlag;
     Parm m_CubicSurfTolerance;
 
+    BoolParm m_ConvertToQuadsFlag;
+    BoolParm m_HighOrderElementFlag;
+
     Parm m_STEPTol;
     BoolParm m_STEPMergePoints;
     IntParm m_STEPRepresentation;
@@ -255,6 +258,9 @@ public:
     BoolParm m_DrawNodesFlag;
     BoolParm m_DrawElementOrientVecFlag;
     BoolParm m_XYZIntCurveFlag;
+
+    IntParm m_NodeOffset;
+    IntParm m_ElementOffset;
 
 protected:
 

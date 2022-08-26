@@ -66,7 +66,11 @@ public:
     virtual void TransferFeaData();
     virtual void TransferSubSurfData();
     virtual void MergeCoplanarParts();
-    virtual void AddStructureParts();
+    virtual void AddStructureSurfParts();
+    virtual void AddStructureFixPoints();
+    virtual void AddStructureTrimPlanes();
+    virtual bool CullPtByTrimGroup( const vec3d &pt, const vector < vec3d > & pplane, const vector < vec3d > & nplane );
+    virtual void RemoveTrimTris();
     virtual void SetFixPointSurfaceNodes();
     virtual void SetFixPointBorderNodes();
     virtual void CheckFixPointIntersects();
@@ -120,6 +124,7 @@ public:
     virtual void TransferDrawObjData();
     virtual bool FeaDataAvailable();
     virtual void SetAllDisplayFlags( bool flag );
+    virtual void UpdateDrawObjs();
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
     virtual void UpdateDisplaySettings();
@@ -160,11 +165,13 @@ public:
 
     virtual void RegisterAnalysis();
 
+    virtual Surf* GetFeaSurf( int FeaPartID, int surf_num );
+
 protected:
 
     virtual void GetMassUnit();
 
-    virtual void WriteNASTRANSet( FILE* Nastran_fid, FILE* NKey_fid, int & set_num, vector < int > set_ids, const string &set_name );
+    virtual void WriteNASTRANSet( FILE* Nastran_fid, FILE* NKey_fid, int & set_num, vector < int > set_ids, const string &set_name, const int &offset );
 
     bool m_FeaMeshInProgress;
     bool m_CADOnlyFlag; // Indicates that ne meshing should be performed, but the surfaces are still exported
@@ -178,11 +185,14 @@ protected:
     unsigned int m_NumFeaParts;
     unsigned int m_NumFeaSubSurfs;
     unsigned int m_NumFeaFixPoints;
+    unsigned int m_NumEls;
     unsigned int m_NumTris;
+    unsigned int m_NumQuads;
     unsigned int m_NumBeams;
 
     vector < string > m_FeaPartNameVec;
     vector < int > m_FeaPartTypeVec;
+    vector < int > m_FeaPartNumSurfVec;
     vector < int > m_FeaPartIncludedElementsVec;
     vector < int > m_FeaPartPropertyIndexVec;
     vector < int > m_FeaPartCapPropertyIndexVec;
@@ -195,6 +205,10 @@ protected:
     map < int, vector < vector < int > > > m_FixPntSurfIndMap; // Vector of FeaFixPoint parent surface index, corresponding to index in m_SurfVec (Note: not the surf ID)
     map < int, vector < bool > > m_FixPointMassFlagMap;
     map < int, vector < double > > m_FixPointMassMap;
+
+    // Groups of trimming planes.
+    vector < vector < vec3d > > m_TrimPt;
+    vector < vector < vec3d > > m_TrimNorm;
 
     vector < string > m_DrawBrowserNameVec;
     vector < int > m_DrawBrowserPartIndexVec;
@@ -216,15 +230,17 @@ protected:
 
 private:
 
-    vector< DrawObj > m_FeaElementDO;
+    vector< DrawObj > m_FeaTriElementDO;
+    vector< DrawObj > m_FeaQuadElementDO;
     vector< DrawObj > m_CapFeaElementDO;
     vector< DrawObj > m_FeaNodeDO;
-    vector< DrawObj > m_TriOrientationDO;
+    vector< DrawObj > m_ElOrientationDO;
     vector< DrawObj > m_CapNormDO;
-    vector< DrawObj > m_SSFeaElementDO;
+    vector< DrawObj > m_SSTriElementDO;
+    vector< DrawObj > m_SSQuadElementDO;
     vector< DrawObj > m_SSCapFeaElementDO;
     vector< DrawObj > m_SSFeaNodeDO;
-    vector< DrawObj > m_SSTriOrientationDO;
+    vector< DrawObj > m_SSElOrientationDO;
     vector< DrawObj > m_SSCapNormDO;
 };
 

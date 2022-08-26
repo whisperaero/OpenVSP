@@ -169,7 +169,7 @@ public:
     string GetVSPAEROPath()                                 { return m_VSPAEROPath; }
     string GetVSPAEROCmd()                                  { return m_VSPAEROCmd; }
     string GetVIEWERCmd()                                   { return m_VIEWERCmd; }
-    string GetSLICERCmd()                                   { return m_SLICERCmd; }
+    string GetLOADSCmd()                                    { return m_LOADSCmd; }
 
     bool CheckForVSPAERO( const string & path );
     bool SetVSPAEROPath( const string & path );
@@ -270,6 +270,8 @@ public:
     void CompCurvature01(const std::string &geom_id, const int &surf_indx, const double &u, const double &w, double &k1, double &k2, double &ka, double &kg);
     double ProjPnt01I(const std::string &geom_id, const vec3d & pt, int &surf_indx, double &u, double &w);
     double AxisProjPnt01I(const std::string &geom_id, const int &iaxis, const vec3d &pt, int &surf_indx_out, double &u_out, double &w_out, vec3d &p_out );
+
+    vec3d CompPntRST( const std::string &geom_id, const int &surf_indx, const double &r, const double &s, const double &t );
 
     //=== Surface API ===//
     string ExportSurfacePatches( int set );
@@ -527,7 +529,7 @@ protected:
     string m_VSPAEROPath;
     string m_VSPAEROCmd;
     string m_VIEWERCmd;
-    string m_SLICERCmd;
+    string m_LOADSCmd;
     vector< string > m_CustomScriptDirs;
 
     IntersectSettings m_ISectSettings;

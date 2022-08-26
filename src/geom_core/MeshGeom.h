@@ -147,7 +147,7 @@ public:
     virtual void Scale();
 
     //==== Intersection, Splitting and Trimming ====//
-    virtual void IntersectTrim( vector< DegenGeom > &degenGeom, bool degen = true, int halfFlag = 0, int intSubsFlag = 1 );
+    virtual void IntersectTrim( vector< DegenGeom > &degenGeom, bool degen = true, int intSubsFlag = 1 );
 
     virtual void MassSliceX( int numSlice, bool writefile = true );
     virtual void degenGeomMassSliceX( vector< DegenGeom > &degenGeom );
@@ -169,7 +169,10 @@ public:
     vector< TetraMassProp* > m_PointMassVec;
 
     virtual void WaterTightCheck( FILE* fid );
-    virtual void AddHalfBox();
+    virtual void DeleteMarkedMeshes();
+    virtual void AddHalfBox( string id );
+
+    virtual TMesh* GetMeshByID( const string & id );
 
     virtual void UpdateSurf() {}
     virtual int GetNumMainSurfs() const

@@ -52,10 +52,6 @@
 #if !defined(CfdMeshMgr_CfdMeshMgr__INCLUDED_)
 #define CfdMeshMgr_CfdMeshMgr__INCLUDED_
 
-//#ifndef DEBUG_CFD_MESH
-//#define DEBUG_CFD_MESH
-//#endif
-
 #include "Surf.h"
 #include "Mesh.h"
 #include "SCurve.h"
@@ -147,11 +143,9 @@ public:
     virtual void AddDefaultSourcesCurrGeom();
     virtual void UpdateSourcesAndWakes();
     virtual void UpdateDomain();
-    virtual void ScaleTriSize( double scale );
 
-//  virtual void Draw();
-//  virtual void Draw_BBox( BndBox box );
-    void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec ) override;
+    virtual void UpdateDrawObjs() override;
+    virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec ) override;
 
     void UpdateDisplaySettings() override;
 
@@ -175,7 +169,10 @@ public:
 
     enum { QUIET_OUTPUT, VOCAL_OUTPUT, };
     virtual void Remesh( int output_type );
-    virtual void RemeshSingleComp( int comp_id, int output_type );
+
+    virtual void PostMesh();
+
+    virtual void ConvertToQuads();
 
     virtual void InitMesh();
 
@@ -184,7 +181,7 @@ public:
     virtual vector< Surf* > CreateDomainSurfs();
 
     virtual void MergeBorderEndPoints();
-    virtual void MergeIPntGroups( list< IPntGroup* > & iPntGroupList, double tol );
+    virtual void MergeEndPointCloud( IPntCloud &cloud, double tol );
     virtual void TessellateChains();
     virtual void SetWakeAttachChain( ISegChain* c );
     virtual void MatchWakes();
@@ -193,6 +190,7 @@ public:
     virtual void BuildMesh();
     virtual void BuildTargetMap( int output_type );
     virtual void RemoveInteriorTris();
+    virtual void RemoveTrimTris() {};  // Implemented for FEAMesh
     virtual void ConnectBorderEdges( bool wakeOnly );
     virtual void MatchBorderEdges( list< Edge* > edgeList );
 
@@ -231,12 +229,13 @@ protected:
     BndBox m_Domain;
 
     vector<Edge*> m_BadEdges;
-    vector<Tri*> m_BadTris;
+    vector<Face*> m_BadFaces;
     vector< Node* > m_nodeStore;
 
 private:
     DrawObj m_MeshBadEdgeDO;
     DrawObj m_MeshBadTriDO;
+    DrawObj m_MeshBadQuadDO;
     DrawObj m_BBoxLineStripDO;
     DrawObj m_BBoxLinesDO;
     DrawObj m_BBoxLineStripSymSplit;

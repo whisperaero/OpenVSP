@@ -13,6 +13,7 @@
 #include "VspUtil.h"
 #include <triangle.h>
 #include <triangle_api.h>
+#include "SurfaceIntersectionMgr.h"
 
 bool LongEdgePairLengthCompare( const pair< Edge*, double >& a, const pair< Edge*, double >& b )
 {
@@ -36,8 +37,6 @@ Mesh::Mesh()
 
     m_Surf = NULL;
     m_GridDensity = NULL;
-
-    m_NumFixPointIter = 0;
 }
 
 Mesh::~Mesh()
@@ -48,13 +47,13 @@ Mesh::~Mesh()
 
 void Mesh::Clear()
 {
-    list< Tri* >::iterator t;
-    for ( t = triList.begin() ; t != triList.end(); ++t )
+    list< Face* >::iterator f;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f )
     {
-        delete ( *t );
+        delete ( *f );
     }
 
-    triList.clear();
+    faceList.clear();
 
     list< Edge* >::iterator e;
     for ( e = edgeList.begin() ; e != edgeList.end(); ++e )
@@ -71,8 +70,6 @@ void Mesh::Clear()
     }
 
     nodeList.clear();
-
-    m_NumFixPointIter = 0;
 }
 
 void Mesh::LimitTargetEdgeLength( Node* n )
@@ -225,41 +222,63 @@ void Mesh::Remesh()
 
 }
 
-void Mesh::LoadSimpTris()
+void Mesh::LoadSimpFaces()
 {
-    list< Tri* >::iterator t;
-    simpTriVec.resize( triList.size() );
-    simpPntVec.resize( triList.size() * 3 );
-    simpUWPntVec.resize( triList.size() * 3 );
+    list< Face* >::iterator f;
+    simpFaceVec.resize( faceList.size() );
+    simpPntVec.resize( faceList.size() * 4 );
+    simpUWPntVec.resize( faceList.size() * 4 );
 
     int cnt = 0;
-    for ( t = triList.begin() ; t != triList.end(); ++t )
+    int ncnt = 0;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f )
     {
-        simpTriVec[cnt].ind0 = cnt * 3;
-        simpTriVec[cnt].ind1 = cnt * 3 + 1;
-        simpTriVec[cnt].ind2 = cnt * 3 + 2;
+        simpFaceVec[cnt].ind0 = ncnt;
+        simpPntVec[ncnt]   = ( *f )->n0->pnt;
+        simpUWPntVec[ncnt] = ( *f )->n0->uw;
+        ncnt++;
 
-        simpPntVec[cnt * 3]   = ( *t )->n0->pnt;
-        simpPntVec[cnt * 3 + 1] = ( *t )->n1->pnt;
-        simpPntVec[cnt * 3 + 2] = ( *t )->n2->pnt;
+        simpFaceVec[cnt].ind1 = ncnt;
+        simpPntVec[ncnt] = ( *f )->n1->pnt;
+        simpUWPntVec[ncnt] = ( *f )->n1->uw;
+        ncnt++;
 
-        simpUWPntVec[cnt * 3] = ( *t )->n0->uw;
-        simpUWPntVec[cnt * 3 + 1] = ( *t )->n1->uw;
-        simpUWPntVec[cnt * 3 + 2] = ( *t )->n2->uw;
+        simpFaceVec[cnt].ind2 = ncnt;
+        simpPntVec[ncnt] = ( *f )->n2->pnt;
+        simpUWPntVec[ncnt] = ( *f )->n2->uw;
+        ncnt++;
+
+        if ( ( *f )->IsQuad() )
+        {
+            simpFaceVec[cnt].m_isQuad = true;
+            simpFaceVec[cnt].ind3 = ncnt;
+            simpPntVec[ncnt] = ( *f )->n3->pnt;
+            simpUWPntVec[ncnt] = ( *f )->n3->uw;
+            ncnt++;
+        }
+
         cnt++;
     }
+
+    simpPntVec.resize( ncnt );
+    simpUWPntVec.resize( ncnt );
 }
 
-void Mesh::CondenseSimpTris()
+void Mesh::CondenseSimpFaces()
 {
     //==== Map Coincedent Point ====//
     vector< int > reMap;
+    reMap.reserve( simpFaceVec.size() * 4 );
     map< int, vector< int > > indMap;
-    for ( int i = 0 ; i < ( int )simpTriVec.size() ; i++ )
+    for ( int i = 0 ; i < ( int )simpFaceVec.size() ; i++ )
     {
-        reMap.push_back( CheckDupOrAdd( simpTriVec[i].ind0, indMap, simpPntVec ) );
-        reMap.push_back( CheckDupOrAdd( simpTriVec[i].ind1, indMap, simpPntVec ) );
-        reMap.push_back( CheckDupOrAdd( simpTriVec[i].ind2, indMap, simpPntVec ) );
+        reMap.push_back( CheckDupOrAdd( simpFaceVec[i].ind0, indMap, simpPntVec ) );
+        reMap.push_back( CheckDupOrAdd( simpFaceVec[i].ind1, indMap, simpPntVec ) );
+        reMap.push_back( CheckDupOrAdd( simpFaceVec[i].ind2, indMap, simpPntVec ) );
+        if ( simpFaceVec[i].m_isQuad )
+        {
+            reMap.push_back( CheckDupOrAdd( simpFaceVec[i].ind3, indMap, simpPntVec ) );
+        }
     }
 
     //==== Reduce Point and UW Vec ====//
@@ -282,11 +301,21 @@ void Mesh::CondenseSimpTris()
 
     simpPntVec = rePntVec;
     simpUWPntVec = reUWVec;
-    for ( int i = 0 ; i < ( int )simpTriVec.size() ; i++ )
+    int iremap = 0;
+    for ( int i = 0 ; i < ( int )simpFaceVec.size() ; i++ )
     {
-        simpTriVec[i].ind0 = reMap[3 * i];
-        simpTriVec[i].ind1 = reMap[3 * i + 1];
-        simpTriVec[i].ind2 = reMap[3 * i + 2];
+        simpFaceVec[i].ind0 = reMap[ iremap ];
+        iremap++;
+        simpFaceVec[i].ind1 = reMap[ iremap ];
+        iremap++;
+        simpFaceVec[i].ind2 = reMap[ iremap ];
+        iremap++;
+
+        if ( simpFaceVec[i].m_isQuad )
+        {
+            simpFaceVec[i].ind3 = reMap[ iremap ];
+            iremap++;
+        }
     }
 }
 
@@ -311,6 +340,7 @@ void Mesh::StretchSimpPnts( double start_x, double end_x, double scale, double a
 
 }
 
+// TODO: Re-write with nanoflann
 int Mesh::CheckDupOrAdd( int ind, map< int, vector< int > > & indMap, vector< vec3d > & pntVec )
 {
     double tol = 1.0e-8;
@@ -441,20 +471,19 @@ int Mesh::Collapse( int num_iter )
 
 }
 
-int Mesh::RemoveRevTris()
+int Mesh::RemoveRevFaces()
 {
     int badcount = 0;
 
     vector < Edge* > remEdges;
 
-    list< Tri* >::iterator t;
-    for ( t = triList.begin() ; t != triList.end(); ++t )
+    list< Face* >::iterator f;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f )
     {
-        vec3d ntri = (*t)->Normal();
-        vec2d avg_uw = ( (*t)->n0->uw + (*t)->n1->uw + (*t)->n2->uw ) * ( 1.0 / 3.0 );
-        vec3d nsurf = m_Surf->GetSurfCore()->CompNorm( avg_uw[0], avg_uw[1] );
+        vec3d nface = (*f)->Normal();
+        vec3d nsurf = (*f)->ComputeCenterNormal( m_Surf );
 
-        double dprod = dot ( ntri, nsurf );
+        double dprod = dot ( nface, nsurf );
 
         if ( m_Surf->GetFlipFlag() )
         {
@@ -463,7 +492,7 @@ int Mesh::RemoveRevTris()
 
         if ( dprod < 0.0 )
         {
-            Edge* e = (*t)->FindLongEdge();
+            Edge* e = (*f)->FindLongEdge();
 
             remEdges.push_back( e );
 
@@ -490,28 +519,28 @@ int Mesh::RemoveRevTris()
 
 void Mesh::ColorTris()
 {
-    list< Tri* >::iterator t;
-    for ( t = triList.begin() ; t != triList.end(); ++t )
+    list< Face* >::iterator f;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f )
     {
-        double q = ( *t )->ComputeQual();
+        double q = ( *f )->ComputeTriQual();
 
         if ( q > M_PI / 6.0 )                                           // > 30 Deg
         {
-            ( *t )->rgb[0] = ( *t )->rgb[1] = ( *t )->rgb[2] = 255;
+            ( *f )->rgb[0] = ( *f )->rgb[1] = ( *f )->rgb[2] = 255;
         }
         else if ( q > M_PI / 7.0 )
         {
-            ( *t )->rgb[2] = 255;    // 25 deg
-            ( *t )->rgb[0] = ( *t )->rgb[1] = 100;
+            ( *f )->rgb[2] = 255;    // 25 deg
+            ( *f )->rgb[0] = ( *f )->rgb[1] = 100;
         }
         else
         {
-            ( *t )->rgb[0] = 255;
-            ( *t )->rgb[1] = ( *t )->rgb[2] = 100;
+            ( *f )->rgb[0] = 255;
+            ( *f )->rgb[1] = ( *f )->rgb[2] = 100;
         }
     }
 
-//  printf( "Num Tris = %d \n", (int)triList.size() );
+//  printf( "Num Faces = %d \n", (int)faceList.size() );
 }
 
 Node* Mesh::AddNode( vec3d p, vec2d uw_in )
@@ -589,19 +618,38 @@ Edge* Mesh::FindEdge( Node* n0, Node* n1 )
     return NULL;
 }
 
-Tri* Mesh::AddTri( Node* n0, Node* n1, Node* n2, Edge* e0, Edge* e1, Edge* e2 )
+Face* Mesh::AddFace( Node* nn0, Node* nn1, Node* nn2, Edge* ee0, Edge* ee1, Edge* ee2 )
 {
-    Tri* tptr = new Tri( n0, n1, n2, e0, e1, e2 );
-    triList.push_back( tptr );
-    tptr->list_ptr = --triList.end();
-    return tptr;
+    Face* fptr = new Face( nn0, nn1, nn2, ee0, ee1, ee2 );
+    faceList.push_back( fptr );
+    fptr->list_ptr = --faceList.end();
+
+    ee0->SetFace( fptr );
+    ee1->SetFace( fptr );
+    ee2->SetFace( fptr );
+
+    return fptr;
 }
 
-void Mesh::RemoveTri( Tri* tptr )
+Face* Mesh::AddFace( Node* nn0, Node* nn1, Node* nn2, Node* nn3, Edge* ee0, Edge* ee1, Edge* ee2, Edge* ee3 )
 {
-    garbageTriVec.push_back( tptr );
-    triList.erase( tptr->list_ptr );
-    tptr->m_DeleteMeFlag = true;
+    Face* fptr = new Face( nn0, nn1, nn2, nn3, ee0, ee1, ee2, ee3 );
+    faceList.push_back( fptr );
+    fptr->list_ptr = --faceList.end();
+
+    ee0->SetFace( fptr );
+    ee1->SetFace( fptr );
+    ee2->SetFace( fptr );
+    ee3->SetFace( fptr );
+
+    return fptr;
+}
+
+void Mesh::RemoveFace( Face* fptr )
+{
+    garbageFaceVec.push_back( fptr );
+    faceList.erase( fptr->list_ptr );
+    fptr->m_DeleteMeFlag = true;
 }
 
 void Mesh::DumpGarbage()
@@ -620,12 +668,12 @@ void Mesh::DumpGarbage()
     }
     garbageEdgeVec.clear();
 
-    //==== Delete Flagged Tris =====//
-    for ( int i = 0 ; i < ( int )garbageTriVec.size() ; i++ )
+    //==== Delete Flagged Faces =====//
+    for ( int i = 0 ; i < ( int )garbageFaceVec.size() ; i++ )
     {
-        delete garbageTriVec[i];
+        delete garbageFaceVec[i];
     }
-    garbageTriVec.clear();
+    garbageFaceVec.clear();
 }
 
 void Mesh::SetNodeFlags()
@@ -656,19 +704,19 @@ void Mesh::SplitEdge( Edge* edge )
         return;
     }
 
-    assert( edge->t0 || edge->t1 );
+    assert( edge->f0 || edge->f1 );
 
-    Tri*  ta = edge->t0;
-    Tri*  tb = edge->t1;
+    Face* fa = edge->f0;
+    Face* fb = edge->f1;
 
     Node* n0 = edge->n0;
     Node* n1 = edge->n1;
-    if ( ta && !ta->CorrectOrder( n0, n1 ) )
+    if ( fa && !fa->CorrectOrder( n0, n1 ) )
     {
         n0 = edge->n1;
         n1 = edge->n0;
     }
-    else if ( !ta && tb && !tb->CorrectOrder( n0, n1 ) )
+    else if ( !fa && fb && !fb->CorrectOrder( n0, n1 ) )
     {
         n0 = edge->n1;
         n1 = edge->n0;
@@ -691,97 +739,41 @@ void Mesh::SplitEdge( Edge* edge )
     Edge* es1 = AddEdge( ns, n1 );
     es0->ridge = edge->ridge;
     es1->ridge = edge->ridge;
+    es0->border = edge->border; // Should be impossible.
+    es1->border = edge->border; // Should be impossible.
 
-    if ( ta )
+    if ( fa )
     {
-        Node* na = ta->OtherNode( n0, n1 );
+        Node* na = fa->OtherNodeTri( n0, n1 );
         Edge* ea = AddEdge( na, ns );
 
-        Edge* ea0 = ta->FindEdge( n0, na );
-        Edge* ea1 = ta->FindEdge( na, n1 );
+        Edge* ea0 = fa->FindEdge( n0, na );
+        Edge* ea1 = fa->FindEdge( na, n1 );
 
-        Tri* ta0 = AddTri( n0, ns, na, ea0, ea, es0 );
-        Tri* ta1 = AddTri( n1, na, ns, ea1, es1, ea );
+        ea0->RemoveFace( fa );
+        ea1->RemoveFace( fa );
 
-        ea->t0 = ta0;
-        ea->t1 = ta1;
+        Face* fa0 = AddFace( n0, ns, na, ea0, ea, es0 );
+        Face* fa1 = AddFace( n1, na, ns, ea1, es1, ea );
 
-        if ( ea0->t0 == ta )
-        {
-            ea0->t0 = ta0;
-        }
-        else if ( ea0->t1 == ta )
-        {
-            ea0->t1 = ta0;
-        }
-        else
-        {
-            assert( 0 );
-        }
-
-        if ( ea1->t0 == ta )
-        {
-            ea1->t0 = ta1;
-        }
-        else if ( ea1->t1 == ta )
-        {
-            ea1->t1 = ta1;
-        }
-        else
-        {
-            assert( 0 );
-        }
-
-        es0->t0 = ta0;
-        es1->t0 = ta1;
-
-        RemoveTri( ta );
+        RemoveFace( fa );
     }
 
-    if ( tb )
+    if ( fb )
     {
-        Node* nb = tb->OtherNode( n0, n1 );
+        Node* nb = fb->OtherNodeTri( n0, n1 );
         Edge* eb = AddEdge( ns, nb );
 
-        Edge* eb0 = tb->FindEdge( n0, nb );
-        Edge* eb1 = tb->FindEdge( nb, n1 );
+        Edge* eb0 = fb->FindEdge( n0, nb );
+        Edge* eb1 = fb->FindEdge( nb, n1 );
 
-        Tri* tb0 = AddTri( n0, nb, ns, es0, eb, eb0 );
-        Tri* tb1 = AddTri( n1, ns, nb, es1, eb1, eb );
+        eb0->RemoveFace( fb );
+        eb1->RemoveFace( fb );
 
-        eb->t0 = tb0;
-        eb->t1 = tb1;
+        Face* fb0 = AddFace( n0, nb, ns, es0, eb, eb0 );
+        Face* fb1 = AddFace( n1, ns, nb, es1, eb1, eb );
 
-        if ( eb0->t0 == tb )
-        {
-            eb0->t0 = tb0;
-        }
-        else if ( eb0->t1 == tb )
-        {
-            eb0->t1 = tb0;
-        }
-        else
-        {
-            assert( 0 );
-        }
-
-        if ( eb1->t0 == tb )
-        {
-            eb1->t0 = tb1;
-        }
-        else if ( eb1->t1 == tb )
-        {
-            eb1->t1 = tb1;
-        }
-        else
-        {
-            assert( 0 );
-        }
-
-        es0->t1 = tb0;
-        es1->t1 = tb1;
-
-        RemoveTri( tb );
+        RemoveFace( fb );
     }
 
     RemoveEdge( edge );
@@ -799,15 +791,15 @@ void Mesh::SwapEdge( Edge* edge )
         return;
     }
 
-    Tri*  ta = edge->t0;
-    Tri*  tb = edge->t1;
+    Face*  fa = edge->f0;
+    Face*  fb = edge->f1;
 
-    if ( !ta || !tb )
+    if ( !fa || !fb )
     {
         return;
     }
 
-    if ( ThreeEdgesThreeTris( edge ) )
+    if ( ThreeEdgesThreeFaces( edge ) )
     {
         return;
     }
@@ -816,32 +808,32 @@ void Mesh::SwapEdge( Edge* edge )
     Node* n1 = edge->n1;
 
 
-    if ( !ta->CorrectOrder( n0, n1 ) )
+    if ( !fa->CorrectOrder( n0, n1 ) )
     {
         n0 = edge->n1;
         n1 = edge->n0;
     }
 
-    Node* na = ta->OtherNode( n0, n1 );
-    Node* nb = tb->OtherNode( n0, n1 );
+    Node* na = fa->OtherNodeTri( n0, n1 );
+    Node* nb = fb->OtherNodeTri( n0, n1 );
 
     assert( na != nb );
 
-    //==== Determine Tri Quality of Existing Tris =====//
-    double qa = ta->ComputeQual();
-    double qb = tb->ComputeQual();
-    double qc = Tri::ComputeQual( n0, nb, na );
-    double qd = Tri::ComputeQual( n1, na, nb );
+    //==== Determine Face Quality of Existing Faces =====//
+    double qa = fa->ComputeTriQual();
+    double qb = fb->ComputeTriQual();
+    double qc = Face::ComputeTriQual( n0, nb, na );
+    double qd = Face::ComputeTriQual( n1, na, nb );
 
     if ( min( qc, qd ) <= min( qa, qb ) )
     {
         return;
     }
 
-    vec3d norma = ta->Normal();
-    vec3d normb = tb->Normal();
-    vec3d normc = Tri::Normal( n0, nb, na );
-    vec3d normd = Tri::Normal( n1, na, nb );
+    vec3d norma = fa->Normal();
+    vec3d normb = fb->Normal();
+    vec3d normc = Face::Normal( n0, nb, na );
+    vec3d normd = Face::Normal( n1, na, nb );
 
     double angab = angle( norma, normb );
 
@@ -864,10 +856,10 @@ void Mesh::SwapEdge( Edge* edge )
         return;
     }
 
-    Edge* ea0 = ta->FindEdge( n0, na );
-    Edge* ea1 = ta->FindEdge( na, n1 );
-    Edge* eb0 = tb->FindEdge( n0, nb );
-    Edge* eb1 = tb->FindEdge( nb, n1 );
+    Edge* ea0 = fa->FindEdge( n0, na );
+    Edge* ea1 = fa->FindEdge( na, n1 );
+    Edge* eb0 = fb->FindEdge( n0, nb );
+    Edge* eb1 = fb->FindEdge( nb, n1 );
 
     edge->n0 = na;
     edge->n1 = nb;
@@ -879,29 +871,29 @@ void Mesh::SwapEdge( Edge* edge )
     n0->RemoveConnectEdge( edge );
     n1->RemoveConnectEdge( edge );
 
-    ta->SetNodesEdges( n0, nb, na, ea0, edge, eb0 );
-    tb->SetNodesEdges( n1, na, nb, eb1, edge, ea1 );
+    fa->SetNodesEdges( n0, nb, na, ea0, edge, eb0 );
+    fb->SetNodesEdges( n1, na, nb, eb1, edge, ea1 );
 
-    if ( ea1->t0 == ta )
+    if ( ea1->f0 == fa )
     {
-        ea1->t0 = tb;
+        ea1->f0 = fb;
     }
-    else if ( ea1->t1 == ta )
+    else if ( ea1->f1 == fa )
     {
-        ea1->t1 = tb;
+        ea1->f1 = fb;
     }
     else
     {
         assert( 0 );
     }
 
-    if ( eb0->t0 == tb )
+    if ( eb0->f0 == fb )
     {
-        eb0->t0 = ta;
+        eb0->f0 = fa;
     }
-    else if ( eb0->t1 == tb )
+    else if ( eb0->f1 == fb )
     {
-        eb0->t1 = ta;
+        eb0->f1 = fa;
     }
     else
     {
@@ -913,22 +905,22 @@ void Mesh::SwapEdge( Edge* edge )
 //CheckValidAllEdges();
 }
 
-bool Mesh::ThreeEdgesThreeTris( Edge* edge )
+bool Mesh::ThreeEdgesThreeFaces( Edge* edge )
 {
     Node* n0 = edge->n0;
     Node* n1 = edge->n1;
 
-    vector< Tri* > tvec0;
-    n0->GetConnectTris( tvec0 );
-    if ( tvec0.size() == 3 && n0->edgeVec.size() == 3 )
+    vector< Face* > f;
+    n0->GetConnectFaces( f );
+    if ( f.size() == 3 && n0->edgeVec.size() == 3 )
     {
         return true;
     }
 
-    vector< Tri* > tvec1;
-    n1->GetConnectTris( tvec1 );
+    vector< Face* > fvec1;
+    n1->GetConnectFaces( fvec1 );
 
-    return tvec1.size() == 3 && n1->edgeVec.size() == 3;
+    return fvec1.size() == 3 && n1->edgeVec.size() == 3;
 }
 
 
@@ -951,39 +943,39 @@ bool Mesh::ValidCollapse( Edge* edge )
         return false;
     }
 
-    if ( !edge->t0 || !edge->t1 )
+    if ( !edge->f0 || !edge->f1 )
     {
         return false;
     }
 
-    if ( edge->t0->m_DeleteMeFlag || edge->t1->m_DeleteMeFlag )
+    if ( edge->f0->m_DeleteMeFlag || edge->f1->m_DeleteMeFlag )
     {
         return false;
     }
 
     Node* n0 = edge->n0;
     Node* n1 = edge->n1;
-    Tri*  ta = edge->t0;
-    Tri*  tb = edge->t1;
-    Node* na = ta->OtherNode( n0, n1 );
-    Node* nb = tb->OtherNode( n0, n1 );
+    Face* fa = edge->f0;
+    Face* fb = edge->f1;
+    Node* na = fa->OtherNodeTri( n0, n1 );
+    Node* nb = fb->OtherNodeTri( n0, n1 );
 
-    //==== Check 3 Tris in a Tri Case =====//
-    Edge* e0a = ta->FindEdge( n0, na );
-    Edge* e1a = ta->FindEdge( n1, na );
+    //==== Check 3 Faces in a Face Case =====//
+    Edge* e0a = fa->FindEdge( n0, na );
+    Edge* e1a = fa->FindEdge( n1, na );
 
     if ( !e0a || ! e1a )
     {
         return false;
     }
 
-    Tri* ta0 = e0a->OtherTri( ta );
-    Tri* ta1 = e1a->OtherTri( ta );
+    Face* fa0 = e0a->OtherFace( fa );
+    Face* fa1 = e1a->OtherFace( fa );
 
-    if ( ta0 && ta1 )
+    if ( fa0 && fa1 )
     {
-        Node* na0 = ta0->OtherNode( n0, na );
-        Node* na1 = ta1->OtherNode( n1, na );
+        Node* na0 = fa0->OtherNodeTri( n0, na );
+        Node* na1 = fa1->OtherNodeTri( n1, na );
 
         if ( na0 == na1 )
         {
@@ -991,16 +983,16 @@ bool Mesh::ValidCollapse( Edge* edge )
         }
     }
 
-    Edge* e0b = tb->FindEdge( n0, nb );
-    Edge* e1b = tb->FindEdge( n1, nb );
+    Edge* e0b = fb->FindEdge( n0, nb );
+    Edge* e1b = fb->FindEdge( n1, nb );
 
-    Tri* tb0 = e0b->OtherTri( tb );
-    Tri* tb1 = e1b->OtherTri( tb );
+    Face* fb0 = e0b->OtherFace( fb );
+    Face* fb1 = e1b->OtherFace( fb );
 
-    if ( tb0 && tb1 )
+    if ( fb0 && fb1 )
     {
-        Node* nb0 = tb0->OtherNode( n0, nb );
-        Node* nb1 = tb1->OtherNode( n1, nb );
+        Node* nb0 = fb0->OtherNodeTri( n0, nb );
+        Node* nb1 = fb1->OtherNodeTri( n1, nb );
 
         if ( nb0 == nb1 )
         {
@@ -1017,19 +1009,19 @@ bool Mesh::ValidCollapse( Edge* edge )
     return true;
 }
 
-bool Mesh::ValidNodeMove( Node* nptr, const vec3d & move_to, Tri* ignoreTri )
+bool Mesh::ValidNodeMove( Node* nptr, const vec3d & move_to, Face* ignoreFace )
 {
     int i;
     bool valid_flag = true;
-    vector < Tri* > triVec;
-    nptr->GetConnectTris( triVec );
+    vector < Face* > faceVec;
+    nptr->GetConnectFaces( faceVec );
 
     vector < vec3d > normals;
-    for ( i = 0 ; i < ( int )triVec.size() ; i++ )
+    for ( i = 0 ; i < ( int )faceVec.size() ; i++ )
     {
-        if ( triVec[i] != ignoreTri )
+        if ( faceVec[i] != ignoreFace )
         {
-            normals.push_back( triVec[i]->Normal() );
+            normals.push_back( faceVec[i]->Normal() );
         }
     }
 
@@ -1037,11 +1029,11 @@ bool Mesh::ValidNodeMove( Node* nptr, const vec3d & move_to, Tri* ignoreTri )
     nptr->pnt = move_to;
 
     vector < vec3d > move_normals;
-    for ( i = 0 ; i < ( int )triVec.size() ; i++ )
+    for ( i = 0 ; i < ( int )faceVec.size() ; i++ )
     {
-        if ( triVec[i] != ignoreTri )
+        if ( faceVec[i] != ignoreFace )
         {
-            move_normals.push_back( triVec[i]->Normal() );
+            move_normals.push_back( faceVec[i]->Normal() );
         }
     }
 
@@ -1088,34 +1080,34 @@ void Mesh::CollapseEdge( Edge* edge )
     Node* n0 = edge->n0;
     Node* n1 = edge->n1;
 
-    Tri*  ta = edge->t0;
-    Tri*  tb = edge->t1;
-    Node* na = ta->OtherNode( n0, n1 );
-    Node* nb = tb->OtherNode( n0, n1 );
+    Face* fa = edge->f0;
+    Face* fb = edge->f1;
+    Node* na = fa->OtherNodeTri( n0, n1 );
+    Node* nb = fb->OtherNodeTri( n0, n1 );
 
     assert( na != nb );
 
-    Edge* ea0 = ta->FindEdge( na, n0 );
-    Edge* ea1 = ta->FindEdge( na, n1 );
-    Edge* eb0 = tb->FindEdge( nb, n0 );
-    Edge* eb1 = tb->FindEdge( nb, n1 );
-    Tri*  ta0 = ea0->OtherTri( ta );
-    Tri*  ta1 = ea1->OtherTri( ta );
-    Tri*  tb0 = eb0->OtherTri( tb );
-    Tri*  tb1 = eb1->OtherTri( tb );
+    Edge* ea0 = fa->FindEdge( na, n0 );
+    Edge* ea1 = fa->FindEdge( na, n1 );
+    Edge* eb0 = fb->FindEdge( nb, n0 );
+    Edge* eb1 = fb->FindEdge( nb, n1 );
+    Face* fa0 = ea0->OtherFace( fa );
+    Face* fa1 = ea1->OtherFace( fa );
+    Face* fb0 = eb0->OtherFace( fb );
+    Face* fb1 = eb1->OtherFace( fb );
 
 
-    if ( ta0 && ta1 )
+    if ( fa0 && fa1 )
     {
-        Node* other_ta0 = ta0->OtherNode( na, n0 );
-        Node* other_ta1 = ta1->OtherNode( na, n1 );
+        Node* other_ta0 = fa0->OtherNodeTri( na, n0 );
+        Node* other_ta1 = fa1->OtherNodeTri( na, n1 );
         assert ( other_ta0 != other_ta1 );
     }
 
-    if ( tb0 && tb1 )
+    if ( fb0 && fb1 )
     {
-        Node* other_tb0 = tb0->OtherNode( nb, n0 );
-        Node* other_tb1 = tb1->OtherNode( nb, n1 );
+        Node* other_tb0 = fb0->OtherNodeTri( nb, n0 );
+        Node* other_tb1 = fb1->OtherNodeTri( nb, n1 );
         assert ( other_tb0 != other_tb1 );
     }
 
@@ -1136,16 +1128,17 @@ void Mesh::CollapseEdge( Edge* edge )
     }
     else
     {
-//      pc  = (n0->pnt + n1->pnt)*0.5;
-        uwc = ( n0->uw + n1->uw ) * 0.5;
+        vec3d psplit = ( n0->pnt + n1->pnt ) * 0.5;
+        vec2d uwsplit = ( n0->uw + n1->uw ) * 0.5;
+        uwc = m_Surf->ClosestUW( psplit, uwsplit[0], uwsplit[1] );
         pc  = m_Surf->CompPnt( uwc.x(), uwc.y() );
     }
 
-    if ( !ValidNodeMove( n0, pc, ta ) )
+    if ( !ValidNodeMove( n0, pc, fa ) )
     {
         return;
     }
-    if ( !ValidNodeMove( n1, pc, tb ) )
+    if ( !ValidNodeMove( n1, pc, fb ) )
     {
         return;
     }
@@ -1162,10 +1155,48 @@ void Mesh::CollapseEdge( Edge* edge )
     if ( ea0->border || ea1->border )
     {
         eca->border = true;
+
+        std::map< Edge *, Node * >::iterator it;
+        it = m_BorderEdgeSplitNode.find( ea0 );
+
+        if( it != m_BorderEdgeSplitNode.end() )
+        {
+            Node* ns = it->second;
+            m_BorderEdgeSplitNode.erase( it );
+            m_BorderEdgeSplitNode[ eca ] = ns;
+        }
+
+        it = m_BorderEdgeSplitNode.find( ea1 );
+
+        if( it != m_BorderEdgeSplitNode.end() )
+        {
+            Node* ns = it->second;
+            m_BorderEdgeSplitNode.erase( it );
+            m_BorderEdgeSplitNode[ eca ] = ns;
+        }
     }
     if ( eb0->border || eb1->border )
     {
         ecb->border = true;
+
+        std::map< Edge *, Node * >::iterator it;
+        it = m_BorderEdgeSplitNode.find( eb0 );
+
+        if( it != m_BorderEdgeSplitNode.end() )
+        {
+            Node* ns = it->second;
+            m_BorderEdgeSplitNode.erase( it );
+            m_BorderEdgeSplitNode[ ecb ] = ns;
+        }
+
+        it = m_BorderEdgeSplitNode.find( eb1 );
+
+        if( it != m_BorderEdgeSplitNode.end() )
+        {
+            Node* ns = it->second;
+            m_BorderEdgeSplitNode.erase( it );
+            m_BorderEdgeSplitNode[ ecb ] = ns;
+        }
     }
     if ( ea0->ridge  || ea1->ridge )
     {
@@ -1176,45 +1207,45 @@ void Mesh::CollapseEdge( Edge* edge )
         ecb->ridge = true;
     }
 
-//jrg Check for invalid tris and improved qual
+//jrg Check for invalid faces and improved qual
 
-    eca->t0 = ta0;
-    eca->t1 = ta1;
-    ecb->t0 = tb0;
-    ecb->t1 = tb1;
+    eca->f0 = fa0;
+    eca->f1 = fa1;
+    ecb->f0 = fb0;
+    ecb->f1 = fb1;
 
-    if ( ta0 )
+    if ( fa0 )
     {
-        ta0->ReplaceEdge( ea0, eca );
+        fa0->ReplaceEdge( ea0, eca );
     }
-    if ( ta1 )
+    if ( fa1 )
     {
-        ta1->ReplaceEdge( ea1, eca );
+        fa1->ReplaceEdge( ea1, eca );
     }
-    if ( tb0 )
+    if ( fb0 )
     {
-        tb0->ReplaceEdge( eb0, ecb );
+        fb0->ReplaceEdge( eb0, ecb );
     }
-    if ( tb1 )
+    if ( fb1 )
     {
-        tb1->ReplaceEdge( eb1, ecb );
+        fb1->ReplaceEdge( eb1, ecb );
     }
 
 
 //CheckValidEdge(eca);
 //CheckValidEdge(ecb);
 
-    //==== Change Any Tris That Point to n0 ====//
-    vector< Tri* > tVec;
-    n0->GetConnectTris( tVec );
-    for ( int i = 0 ; i < ( int )tVec.size() ; i++ )
+    //==== Change Any Faces That Point to n0 ====//
+    vector< Face* > fVec;
+    n0->GetConnectFaces( fVec );
+    for ( int i = 0 ; i < ( int )fVec.size() ; i++ )
     {
-        tVec[i]->ReplaceNode( n0, nc );
+        fVec[i]->ReplaceNode( n0, nc );
     }
-    n1->GetConnectTris( tVec );
-    for ( int i = 0 ; i < ( int )tVec.size() ; i++ )
+    n1->GetConnectFaces( fVec );
+    for ( int i = 0 ; i < ( int )fVec.size() ; i++ )
     {
-        tVec[i]->ReplaceNode( n1, nc );
+        fVec[i]->ReplaceNode( n1, nc );
     }
 
     //==== Change Edges That Point To n0 ====//
@@ -1250,8 +1281,8 @@ void Mesh::CollapseEdge( Edge* edge )
     RemoveEdge( edge );
     RemoveNode( n0 );
     RemoveNode( n1 );
-    RemoveTri( ta );
-    RemoveTri( tb );
+    RemoveFace( fa );
+    RemoveFace( fb );
     RemoveEdge( ea0 );
     RemoveEdge( ea1 );
     RemoveEdge( eb0 );
@@ -1303,11 +1334,8 @@ void Mesh::OptSmooth( int num_iter )
 
 bool Mesh::SetFixPoint( const vec3d &fix_pnt, vec2d fix_uw )
 {
-    double min_dist = FLT_MAX;
+    double min_dist = DBL_MAX;
     Node* closest_node = NULL;
-    double tol = m_GridDensity->m_MinLen;
-
-    m_NumFixPointIter++;
 
     list< Node* >::iterator n;
     for ( n = nodeList.begin(); n != nodeList.end(); ++n )
@@ -1325,57 +1353,21 @@ bool Mesh::SetFixPoint( const vec3d &fix_pnt, vec2d fix_uw )
 
     if ( closest_node && m_Surf->ValidUW( fix_uw ) )
     {
-        // Check lengths of connected edges and split if longer than tolerance
-        vector < Edge* > check_edge_vec = closest_node->edgeVec;
-        bool long_edge = false;
+        // Move closest node to fixed point location
+        closest_node->uw = m_Surf->ClosestUW( fix_pnt, fix_uw.x(), fix_uw.y() );
+        closest_node->pnt = m_Surf->CompPnt( closest_node->uw.x(), closest_node->uw.y() );
+        closest_node->fixed = true;
 
-        for ( size_t i = 0; i < check_edge_vec.size(); i++ )
-        {
-            if ( !check_edge_vec[i]->border && check_edge_vec[i]->ComputeLength() > tol )
-            {
-                long_edge = true;
-                break;
-            }
-        }
+        // Check for any error.  Should always be 0.0.
+        // However, projecting point and computing is cheap, so no harm in keeping the above code.
+        // vec2d duw = closest_node->uw - fix_uw;
+        // vec3d dpt = closest_node->pnt - fix_pnt;
+        // printf( "duw %e %e dpt %e %e %e\n", duw.x(), duw.y(), dpt.x(), dpt.y(), dpt.z() );
 
-        if ( !long_edge )
-        {
-            // Move closest node to fixed point location
-            closest_node->uw = m_Surf->ClosestUW( fix_pnt, fix_uw.x(), fix_uw.y() );
-            closest_node->pnt = m_Surf->CompPnt( closest_node->uw.x(), closest_node->uw.y() );
-            closest_node->fixed = true;
-            return true;
-        }
+        return true;
     }
 
-    list< Edge* >::iterator e;
-
-    //===== Split if no nodes found ====//
-    vector < Edge* > split_edge_vec;
-    split_edge_vec.reserve( edgeList.size() );
-    for ( e = edgeList.begin(); e != edgeList.end(); ++e )
-    {
-        if ( !( *e )->border )
-        {
-            split_edge_vec.push_back( ( *e ) );
-        }
-    }
-
-    int num_split = split_edge_vec.size();
-
-    for ( int i = 0; i < num_split; i++ )
-    {
-        SplitEdge( split_edge_vec[i] );
-    }
-
-    DumpGarbage();
-
-    if ( num_split > 0 )
-    {
-        return SetFixPoint( fix_pnt, fix_uw );
-    }
-
-    return false; // Indicates no closest node was found
+    return false;
 }
 
 void Mesh::AdjustEdgeLengths()
@@ -1451,73 +1443,56 @@ void Mesh::CheckValidEdge( Edge* edge )
     assert( n0 );
     assert( n1 );
 
-    Tri* t0 = edge->t0;
-    Tri* t1 = edge->t1;
+    Face* f0 = edge->f0;
+    Face* f1 = edge->f1;
 
-    assert ( t0 || t1 );
+    assert ( f0 || f1 );
 
-    if ( t0 )
+    if ( f0 )
     {
-        assert ( t0->Contains( ( edge ) ) );
-        assert ( t0->Contains( n0, n1 ) );
-        if ( !t0->Contains( edge ) )
+        assert ( f0->Contains(( edge ) ) );
+        assert ( f0->Contains( n0, n1 ) );
+        if ( !f0->Contains( edge ) )
         {
-            t0->debugFlag = true;
+            f0->debugFlag = true;
         }
     }
-    if ( t1 )
+    if ( f1 )
     {
-        assert ( t1->Contains( ( edge ) ) );
-        assert ( t1->Contains( n0, n1 ) );
-        if ( !t1->Contains( edge ) )
+        assert ( f1->Contains(( edge ) ) );
+        assert ( f1->Contains( n0, n1 ) );
+        if ( !f1->Contains( edge ) )
         {
-            t1->debugFlag = true;
+            f1->debugFlag = true;
         }
 
     }
-    if ( t0 && t1 )
+    if ( f0 && f1 )
     {
-        Node* na = t0->OtherNode( n0, n1 );
-        Node* nb = t1->OtherNode( n0, n1 );
+        Node* na = f0->OtherNodeTri( n0, n1 );
+        Node* nb = f1->OtherNodeTri( n0, n1 );
         assert( na != nb );
 
-        vec3d norm0 = t0->Normal();
-        vec3d norm1 = t1->Normal();
+        vec3d norm0 = f0->Normal();
+        vec3d norm1 = f1->Normal();
 
 //      assert( angle( norm0, norm1 ) < M_PI_2 );
         if ( angle( norm0, norm1 ) >= M_PI_2 )
         {
-            t0->debugFlag = true;
-            t1->debugFlag = true;
+            f0->debugFlag = true;
+            f1->debugFlag = true;
         }
     }
 }
 
-void Mesh::TriangulateBorder( const vector< vec3d > &uw_border )
+bool vec2dCompare( const vec2d &a, const vec2d &b )
 {
-
+    if ( a.x() == b.x() )
+        return a.y() < b.y();
+    return a.x() < b.x();
 }
 
-void Mesh::CheckValidTriInput( vector< vec2d > & uw_points, vector< MeshSeg > & segs_indexes )
-{
-    //int min_i;
-    //int min_j;
-    double min_dist = 1.0e12;
-    for ( int i = 0 ; i < ( int )uw_points.size() ; i++ )
-    {
-        for ( int j = i + 1 ; j < ( int )uw_points.size() ; j++ )
-        {
-            double d = dist( uw_points[i], uw_points[j] );
-            if ( d < min_dist )
-            {
-                min_dist = d;
-            }
-        }
-    }
-}
-
-
-void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_indexes )
+void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_indexes, SurfaceIntersectionSingleton *MeshMgr )
 {
     assert( m_Surf );
 
@@ -1531,6 +1506,51 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     {
         return;
     }
+
+#ifdef DEBUG_CFD_MESH
+    static int namecnt = 0;
+    FILE* fp;
+
+    vector< vec2d > sorted = uw_points;
+    sort( sorted.begin(), sorted.end(), vec2dCompare );
+
+    sprintf( str, "%sSortedUnscaledMesh_UW%d.m", MeshMgr->m_DebugDir.c_str(), namecnt );
+    fp = fopen( str, "w" );
+
+    fprintf( fp, "u = [" );
+    for ( i = 0 ; i < sorted.size() ; i++ )
+    {
+        fprintf( fp, "%.19e", sorted[i].x() );
+
+        if ( i < sorted.size() - 1 )
+        {
+            fprintf( fp, ";\n" );
+        }
+        else
+        {
+            fprintf( fp, "];\n" );
+        }
+    }
+    fprintf( fp, "v = [" );
+    for ( i = 0 ; i < sorted.size() ; i++ )
+    {
+        fprintf( fp, "%.19e", sorted[i].y() );
+
+        if ( i < sorted.size() - 1 )
+        {
+            fprintf( fp, ";\n" );
+        }
+        else
+        {
+            fprintf( fp, "];\n" );
+        }
+    }
+    fprintf( fp, "figure ( 1 );\n" );
+    fprintf( fp, "plot( u', v', 'x' );\n" );
+    fprintf( fp, "axis equal;\n" );
+
+    fclose( fp );
+#endif
 
     vec2d VspMinUW = vec2d( m_Surf->GetSurfCore()->GetMinU(), m_Surf->GetSurfCore()->GetMinW() );
     double VspMinU = VspMinUW.v[0];
@@ -1559,25 +1579,47 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     }
 
 #ifdef DEBUG_CFD_MESH
-    static int namecnt = 0;
-    sprintf( str, "%sMesh_UW%d.dat", cfdMeshMgrPtr->m_DebugDir.get_char_star(), namecnt );
-
-    FILE* fp = fopen( str, "w" );
+    sprintf( str, "%sMesh_UW%d.m", MeshMgr->m_DebugDir.c_str(), namecnt );
+    fp = fopen( str, "w" );
+    fprintf( fp, "u = [" );
     for ( i = 0 ; i < num_edges ; i++ )
     {
         int ind0 = segs_indexes[i].m_Index[0];
         int ind1 = segs_indexes[i].m_Index[1];
+        fprintf( fp, "%.19e %.19e", uw_points[ind0].x(), uw_points[ind1].x() );
 
-        fprintf( fp, "MOVE \n" );
-        fprintf( fp, "%f %f\n", uw_points[ind0].x(), uw_points[ind0].y() );
-        fprintf( fp, "%f %f\n", uw_points[ind1].x(), uw_points[ind1].y() );
+        if ( i < num_edges - 1 )
+        {
+            fprintf( fp, ";\n" );
+        }
+        else
+        {
+            fprintf( fp, "];\n" );
+        }
     }
+    fprintf( fp, "v = [" );
+    for ( i = 0 ; i < num_edges ; i++ )
+    {
+        int ind0 = segs_indexes[i].m_Index[0];
+        int ind1 = segs_indexes[i].m_Index[1];
+        fprintf( fp, "%.19e %.19e", uw_points[ind0].y(), uw_points[ind1].y() );
+
+        if ( i < num_edges - 1 )
+        {
+            fprintf( fp, ";\n" );
+        }
+        else
+        {
+            fprintf( fp, "];\n" );
+        }
+    }
+    fprintf( fp, "figure ( 1 );\n" );
+    fprintf( fp, "plot( u', v', 'x-' );\n" );
+    fprintf( fp, "axis equal;\n" );
+
     fclose( fp );
 #endif
 
-
-
-//CheckValidTriInput( uw_points, segs_indexes );
 
 
     //==== Dump Into Triangle ====//
@@ -1673,74 +1715,6 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     tristatus = triangle_mesh_create( ctx, &in );
     if ( tristatus != TRI_OK ) printf( "triangle_mesh_create Error\n" );
 
-#ifdef DEBUG_CFD_MESH
-    sprintf( str, "%sUWTriMeshOut%d.dat", cfdMeshMgrPtr->m_DebugDir.get_char_star(), namecnt );
-    fp = fopen( str, "w" );
-    for ( i = 0 ; i < out.numberoftriangles ; i++ )
-    {
-        int ind0 = out.trianglelist[i * 3];
-        int ind1 = out.trianglelist[i * 3 + 1];
-        int ind2 = out.trianglelist[i * 3 + 2];
-
-        fprintf( fp, "MOVE \n" );
-        fprintf( fp, "%f %f\n", out.pointlist[ind0 * 2], out.pointlist[ind0 * 2 + 1] );
-        fprintf( fp, "%f %f\n", out.pointlist[ind1 * 2], out.pointlist[ind1 * 2 + 1] );
-        fprintf( fp, "%f %f\n", out.pointlist[ind2 * 2], out.pointlist[ind2 * 2 + 1] );
-        fprintf( fp, "%f %f\n", out.pointlist[ind0 * 2], out.pointlist[ind0 * 2 + 1] );
-
-    }
-    fclose( fp );
-    namecnt++;
-#endif
-
-//    static int namecnt = 0;
-//
-//    sprintf( str, "UWTriMeshOut%d.m", namecnt );
-//    FILE *fp = fopen( str, "w" );
-//    fprintf( fp, "clear all\nformat compact\n" );
-//    fprintf( fp, "t=[" );
-//    for ( i = 0 ; i < out.numberoftriangles ; i++ )
-//    {
-//        int ind0 = out.trianglelist[i * 3] + 1;
-//        int ind1 = out.trianglelist[i * 3 + 1] + 1;
-//        int ind2 = out.trianglelist[i * 3 + 2] + 1;
-//
-//        fprintf( fp, "%d, %d, %d", ind0, ind1, ind2 );
-//
-//        if ( i < out.numberoftriangles - 1 )
-//            fprintf( fp, ";\n" );
-//        else
-//            fprintf( fp, "];\n" );
-//    }
-//
-//    fprintf( fp, "x=[" );
-//    for ( i = 0; i < out.numberofpoints; i++ )
-//    {
-//        fprintf( fp, "%f", out.pointlist[i * 2] );
-//
-//        if ( i < out.numberofpoints - 1 )
-//            fprintf( fp, ";\n" );
-//        else
-//            fprintf( fp, "];\n" );
-//
-//    }
-//
-//    fprintf( fp, "y=[" );
-//    for ( i = 0; i < out.numberofpoints; i++ )
-//    {
-//        fprintf( fp, "%f", out.pointlist[i * 2 + 1] );
-//
-//        if ( i < out.numberofpoints - 1 )
-//            fprintf( fp, ";\n" );
-//        else
-//            fprintf( fp, "];\n" );
-//
-//    }
-//
-//    fprintf( fp, "triplot(t,x,y)\n" );
-//
-//    fclose( fp );
-//    namecnt++;
 
     //==== Clear All Node, Edge, Tri Data ====//
     Clear();
@@ -1783,99 +1757,200 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
 
             cnt += 3;
 
-            Edge* e0 = FindEdge( n0, n1 );
+            Edge* e0 = n0->FindEdge( n1 );
             if ( !e0 )
             {
                 e0 = AddEdge( n0, n1 );
             }
 
-            Edge* e1 = FindEdge( n1, n2 );
+            Edge* e1 = n1->FindEdge( n2 );
             if ( !e1 )
             {
                 e1 = AddEdge( n1, n2 );
             }
 
-            Edge* e2 = FindEdge( n2, n0 );
+            Edge* e2 = n2->FindEdge( n0 );
             if ( !e2 )
             {
                 e2 = AddEdge( n2, n0 );
             }
 
-            Tri* tri = AddTri( n0, n1, n2, e0, e1, e2 );
-
-            if ( e0->t0 == NULL )
-            {
-                e0->t0 = tri;
-            }
-            else if ( e0->t1 == NULL )
-            {
-                e0->t1 = tri;
-            }
-            else
-            {
-                assert( 0 );
-            }
-
-            if ( e1->t0 == NULL )
-            {
-                e1->t0 = tri;
-            }
-            else if ( e1->t1 == NULL )
-            {
-                e1->t1 = tri;
-            }
-            else
-            {
-                assert( 0 );
-            }
-
-            if ( e2->t0 == NULL )
-            {
-                e2->t0 = tri;
-            }
-            else if ( e2->t1 == NULL )
-            {
-                e2->t1 = tri;
-            }
-            else
-            {
-                assert( 0 );
-            }
-
+            Face* face = AddFace( n0, n1, n2, e0, e1, e2 );
         }
 
-        //==== Fix The Exterior Edges ====//
-        list< Edge* >::iterator e;
-        for ( e = edgeList.begin(); e != edgeList.end(); ++e )
-        {
-            if ( ( *e )->t0 == NULL || ( *e )->t1 == NULL )
-            {
-                //          (*e)->ridge = true;
-                ( *e )->border = true;
-                ( *e )->n0->fixed = true;
-                ( *e )->n1->fixed = true;
-            }
-        }
 
         for ( j = 0; j < (int)segs_indexes.size(); j++ )
         {
             Node* n0 = nodeVec[segs_indexes[j].m_Index[0]];
             Node* n1 = nodeVec[segs_indexes[j].m_Index[1]];
 
-            for ( int k = 0; k < (int)n0->edgeVec.size(); k++ )
-            {
-                Node* ne0 = n0->edgeVec[k]->n0;
-                Node* ne1 = n0->edgeVec[k]->n1;
+            Edge *e = n0->FindEdge( n1 );
 
-                if ( ( ne0 == n0 && ne1 == n1 ) || ( ne0 == n1 && ne1 == n0 ) )
-                {
-                    n0->edgeVec[k]->border = true;
-                    n0->fixed = true;
-                    n1->fixed = true;
-                }
+            if ( e )
+            {
+                e->border = true;
+
+                n0->fixed = true;
+                n1->fixed = true;
+
+                vec2d uw = segs_indexes[j].m_UWmid;
+                vec3d pnt = m_Surf->CompPnt( uw.v[0], uw.v[1] );
+                Node* nsplit = AddNode( pnt, uw );
+                nsplit->fixed = true;
+
+                m_BorderEdgeSplitNode[ e ] = nsplit;
             }
         }
     }
+
+#ifdef DEBUG_CFD_MESH
+        sprintf( str, "%sUWTriMeshOut%d.m", MeshMgr->m_DebugDir.c_str(), namecnt );
+        fp = fopen( str, "w" );
+        fprintf( fp, "clear all\nformat compact\n" );
+        fprintf( fp, "t = [" );
+        for ( i = 0 ; i < out.numberoftriangles ; i++ )
+        {
+            int ind0 = out.trianglelist[i * 3] + 1;
+            int ind1 = out.trianglelist[i * 3 + 1] + 1;
+            int ind2 = out.trianglelist[i * 3 + 2] + 1;
+
+            fprintf( fp, "%d, %d, %d", ind0, ind1, ind2 );
+
+            if ( i < out.numberoftriangles - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+        }
+
+        fprintf( fp, "uprm = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            fprintf( fp, "%f", out.pointlist[i * 2] );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+
+        }
+
+        fprintf( fp, "wprm = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            fprintf( fp, "%f", out.pointlist[i * 2 + 1] );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+
+        }
+
+        fprintf( fp, "u = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            double u = out.pointlist[i * 2];
+            double w = out.pointlist[i * 2 + 1];
+            double su = 1.0 / m_Surf->GetUScale( w / VspdW );
+            double sw = 1.0 / m_Surf->GetWScale( u / VspdU );
+            double uu = su * u + VspMinU;
+
+            fprintf( fp, "%f", uu );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+        }
+
+        fprintf( fp, "w = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            double u = out.pointlist[i * 2];
+            double w = out.pointlist[i * 2 + 1];
+            double su = 1.0 / m_Surf->GetUScale( w / VspdW );
+            double sw = 1.0 / m_Surf->GetWScale( u / VspdU );
+            double ww = sw * w + VspMinW;
+
+            fprintf( fp, "%f", ww );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+        }
+
+        fprintf( fp, "x = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            double u = out.pointlist[i * 2];
+            double w = out.pointlist[i * 2 + 1];
+            double su = 1.0 / m_Surf->GetUScale( w / VspdW );
+            double sw = 1.0 / m_Surf->GetWScale( u / VspdU );
+            vec2d uw = vec2d( su * u + VspMinU, sw * w + VspMinW );
+            vec3d pnt = m_Surf->CompPnt( uw.v[0], uw.v[1] );
+
+            fprintf( fp, "%f", pnt.x() );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+        }
+
+        fprintf( fp, "y = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            double u = out.pointlist[i * 2];
+            double w = out.pointlist[i * 2 + 1];
+            double su = 1.0 / m_Surf->GetUScale( w / VspdW );
+            double sw = 1.0 / m_Surf->GetWScale( u / VspdU );
+            vec2d uw = vec2d( su * u + VspMinU, sw * w + VspMinW );
+            vec3d pnt = m_Surf->CompPnt( uw.v[0], uw.v[1] );
+
+            fprintf( fp, "%f", pnt.y() );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+        }
+
+        fprintf( fp, "z = [" );
+        for ( i = 0; i < out.numberofpoints; i++ )
+        {
+            double u = out.pointlist[i * 2];
+            double w = out.pointlist[i * 2 + 1];
+            double su = 1.0 / m_Surf->GetUScale( w / VspdW );
+            double sw = 1.0 / m_Surf->GetWScale( u / VspdU );
+            vec2d uw = vec2d( su * u + VspMinU, sw * w + VspMinW );
+            vec3d pnt = m_Surf->CompPnt( uw.v[0], uw.v[1] );
+
+            fprintf( fp, "%f", pnt.z() );
+
+            if ( i < out.numberofpoints - 1 )
+                fprintf( fp, ";\n" );
+            else
+                fprintf( fp, "];\n" );
+        }
+
+        fprintf( fp, "figure( 2 )\n" );
+        fprintf( fp, "triplot( t, uprm, wprm )\n" );
+        fprintf( fp, "axis equal\n" );
+
+        fprintf( fp, "figure( 3 )\n" );
+        fprintf( fp, "triplot( t, u, w )\n" );
+        fprintf( fp, "axis equal\n" );
+
+        fprintf( fp, "figure( 4 )\n" );
+        fprintf( fp, "trimesh( t, x, y, z )\n" );
+        fprintf( fp, "axis equal\n" );
+
+        fclose( fp );
+        namecnt++;
+#endif
+
+
 
     //==== Free Local Memory ====//
     if ( in.pointlist )
@@ -1911,66 +1986,35 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     triangle_context_destroy( ctx );
 }
 
-void Mesh::RemoveInteriorTrisEdgesNodes()
+void Mesh::RemoveInteriorFacesEdgesNodes()
 {
-    set < Tri* > remTris;
+    set < Face* > remFaces;
     set < Edge* > remEdges;
     set < Node* > remNodes;
 
-    list< Tri* >::iterator t;
-    for ( t = triList.begin() ; t != triList.end(); ++t )
+    list< Face* >::iterator f;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f )
     {
-        //==== Check Surrounding Tris =====//
-        if ( ( *t )->deleteFlag )
+        //==== Check Surrounding Faces =====//
+        if ( ( *f )->deleteFlag )
         {
-            //==== Check Edges ====//
-            if ( ( *t )->e0->BothAdjoiningTrisInterior() )
-            {
-                remEdges.insert( ( *t )->e0 );
-            }
-            if ( ( *t )->e1->BothAdjoiningTrisInterior() )
-            {
-                remEdges.insert( ( *t )->e1 );
-            }
-            if ( ( *t )->e2->BothAdjoiningTrisInterior() )
-            {
-                remEdges.insert( ( *t )->e2 );
-            }
-
-            //==== Check Nodes ====//
-            if ( ( *t )->n0->AllInteriorConnectedTris() )
-            {
-                remNodes.insert( ( *t )->n0 );
-            }
-            if ( ( *t )->n1->AllInteriorConnectedTris() )
-            {
-                remNodes.insert( ( *t )->n1 );
-            }
-            if ( ( *t )->n2->AllInteriorConnectedTris() )
-            {
-                remNodes.insert( ( *t )->n2 );
-            }
-
-            remTris.insert( ( *t ) );
+            ( *f )->BuildRemovalSet( remFaces, remEdges, remNodes );
         }
     }
 
-    //==== Remove References to Deleted Tris =====//
-    set< Tri* >::iterator st;
-    for ( st = remTris.begin() ; st != remTris.end(); ++st )
+    //==== Remove References to Deleted Faces =====//
+    set< Face* >::iterator sf;
+    for ( sf = remFaces.begin() ; sf != remFaces.end(); ++sf )
     {
-        ( *st )->e0->ReplaceTri( ( *st ), NULL );
-        ( *st )->e1->ReplaceTri( ( *st ), NULL );
-        ( *st )->e2->ReplaceTri( ( *st ), NULL );
+        ( *sf )->EdgeForgetFace();
     }
     set< Edge* >::iterator se;
     for ( se = remEdges.begin() ; se != remEdges.end(); ++se )
     {
-        ( *se )->n0->RemoveConnectEdge( ( *se ) );
-        ( *se )->n1->RemoveConnectEdge( ( *se ) );
+        ( *se )->NodeForgetEdge();
     }
 
-    //==== Remove Node Edges and Tris =====//
+    //==== Remove Node Edges and Faces =====//
     set< Node* >::iterator sn;
     for ( sn = remNodes.begin() ; sn != remNodes.end(); ++sn )
     {
@@ -1980,9 +2024,9 @@ void Mesh::RemoveInteriorTrisEdgesNodes()
     {
         RemoveEdge( ( *se ) );
     }
-    for ( st = remTris.begin() ; st != remTris.end(); ++st )
+    for ( sf = remFaces.begin() ; sf != remFaces.end(); ++sf )
     {
-        RemoveTri( ( *st ) );
+        RemoveFace(( *sf ));
     }
 
     DumpGarbage();
@@ -2071,46 +2115,7 @@ void Mesh::ReadSTL( const char* file_name )
                 e2 = AddEdge( n2, n0 );
             }
 
-            Tri* tri = AddTri( n0, n1, n2, e0, e1, e2 );
-
-            if      ( e0->t0 == NULL )
-            {
-                e0->t0 = tri;
-            }
-            else if ( e0->t1 == NULL )
-            {
-                e0->t1 = tri;
-            }
-            else
-            {
-                assert( 0 );
-            }
-
-            if      ( e1->t0 == NULL )
-            {
-                e1->t0 = tri;
-            }
-            else if ( e1->t1 == NULL )
-            {
-                e1->t1 = tri;
-            }
-            else
-            {
-                assert( 0 );
-            }
-
-            if      ( e2->t0 == NULL )
-            {
-                e2->t0 = tri;
-            }
-            else if ( e2->t1 == NULL )
-            {
-                e2->t1 = tri;
-            }
-            else
-            {
-                assert( 0 );
-            }
+            Face* face = AddFace( n0, n1, n2, e0, e1, e2 );
         }
     }
     if ( file_id )
@@ -2122,7 +2127,7 @@ void Mesh::ReadSTL( const char* file_name )
     list< Edge* >::iterator e;
     for ( e = edgeList.begin() ; e != edgeList.end(); ++e )
     {
-        if ( ( *e )->t0 == NULL || ( *e )->t1 == NULL )
+        if (( *e )->f0 == NULL || ( *e )->f1 == NULL )
         {
             ( *e )->ridge = true;
             ( *e )->n0->fixed = true;
@@ -2151,16 +2156,16 @@ void Mesh::WriteSTL( const char* file_name )
 
 void Mesh::WriteSTL( FILE* file_id )
 {
-    for ( int i = 0 ; i < ( int )simpTriVec.size() ; i++ )
+    for ( int i = 0 ; i < ( int )simpFaceVec.size() ; i++ )
     {
-        SimpTri* t = &simpTriVec[i];
+        SimpFace* f = &simpFaceVec[i];
 
-        vec3d& p0 = simpPntVec[t->ind0];
-        vec3d& p1 = simpPntVec[t->ind1];
-        vec3d& p2 = simpPntVec[t->ind2];
-        vec3d v10 = p1 - p0;
-        vec3d v20 = p2 - p1;
-        vec3d norm = cross( v10, v20 );
+        vec3d& p0 = simpPntVec[f->ind0];
+        vec3d& p1 = simpPntVec[f->ind1];
+        vec3d& p2 = simpPntVec[f->ind2];
+        vec3d v01 = p1 - p0;
+        vec3d v12 = p2 - p1;
+        vec3d norm = cross( v01, v12 );
         norm.normalize();
 
         fprintf( file_id, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
@@ -2172,7 +2177,188 @@ void Mesh::WriteSTL( FILE* file_id )
 
         fprintf( file_id, "   endloop\n" );
         fprintf( file_id, " endfacet\n" );
+
+        if ( f->m_isQuad ) // Split quad and write additional tri.
+        {
+            vec3d& p3 = simpPntVec[f->ind3];
+            vec3d v23 = p3 - p2;
+            vec3d v30 = p0 - p3;
+            norm = cross( v23, v30 );
+            norm.normalize();
+
+            fprintf( file_id, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
+            fprintf( file_id, "   outer loop\n" );
+
+            fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
+            fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
+            fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p3.x(), p3.y(), p3.z() );
+
+            fprintf( file_id, "   endloop\n" );
+            fprintf( file_id, " endfacet\n" );
+        }
     }
+}
+
+// Edge split data structure.
+class splitData
+{
+public:
+    splitData() : ns{nullptr}, es0{nullptr}, es1{nullptr} {}
+    splitData( Node* ns, Edge* es0, Edge* es1 ) : ns{ns}, es0{es0}, es1{es1} {}
+
+    Node* ns;
+    Edge* es0;
+    Edge* es1;
+};
+
+void Mesh::ConvertToQuads()
+{
+    // Store copies of original edge and face lists.
+    // Working from a copy allows us to traverse the list as we add edges/faces without traversing the new edges/faces.
+    list < Edge* > origEdgeList = edgeList;
+    list < Face* > origFaceList = faceList;
+
+    // Map containing information about each edge split -- keyed by the edge.  This allows us to recall this information
+    // each time the edge is used.
+    map< Edge*, splitData > splitEdgeMap;
+
+    // Loop over all edges.
+    for ( list< Edge* >::iterator e = origEdgeList.begin() ; e != origEdgeList.end(); ++e )
+    {
+        Node* n0 = ( *e )->n0;
+        Node* n1 = ( *e )->n1;
+
+        Node* ns = NULL;
+
+        std::map< Edge *, Node * >::iterator it;
+        it = m_BorderEdgeSplitNode.find( *e );
+
+        if( it != m_BorderEdgeSplitNode.end() )
+        {
+            ns = it->second;
+        }
+        else
+        {
+            // Approximate edge midpoint.
+            // Should perhaps be weighted by relative target edge lengths.
+            vec3d psplit  = ( n0->pnt + n1->pnt ) * 0.5;
+            vec2d uwsplit = ( n0->uw  + n1->uw ) * 0.5;
+
+            // Project approximate midpoint to surface, determine true UW and XYZ.
+            vec2d uws = m_Surf->ClosestUW( psplit, uwsplit[0], uwsplit[1] );
+            vec3d ps  = m_Surf->CompPnt( uws.x(), uws.y() );
+
+            // Create midpoint node.
+            ns  = AddNode( ps, uws );
+
+            // Node will be fixed if both endpoints are fixed (i.e. edge is a border edge).
+            ns->fixed = n0->fixed && n1->fixed;
+        }
+
+        // Create split edges.
+        Edge* es0 = AddEdge( n0, ns );
+        Edge* es1 = AddEdge( ns, n1 );
+
+        // Copy parent properties to split edges.
+        es0->ridge = ( *e )->ridge;
+        es1->ridge = ( *e )->ridge;
+        es0->border = ( *e )->border;
+        es1->border = ( *e )->border;
+
+        // Add split data to map.
+        splitEdgeMap[ *e ] = splitData( ns, es0, es1 );
+
+        // Compute edge length for new node.
+        ComputeTargetEdgeLength( ns );
+        LimitTargetEdgeLength( ns );
+    }
+
+    // Loop over all faces
+    for ( list< Face* >::iterator f = origFaceList.begin() ; f != origFaceList.end(); ++f )
+    {
+        // Skip any quads - should be impossible.
+        if( ( *f )->IsQuad() )
+        {
+            continue;
+        }
+
+        // Construct triangle center point and add node.  Center point could possibly be weighted based on target
+        // edge lengths.
+        vec3d pcen;
+        vec2d uwcen;
+        ( *f )->ComputeCenterPnt( m_Surf, pcen, uwcen );
+        Node* ncen  = AddNode( pcen, uwcen );
+
+        // Get existing triangle nodes.  These are in cw order.
+        Node* n0 = ( *f )->n0;
+        Node* n1 = ( *f )->n1;
+        Node* n2 = ( *f )->n2;
+
+        // Get existing triangle edges.  Lookup edges by nodes because they aren't stored in any particular order.
+        Edge* e0 = ( *f )->FindEdge( n0, n1 );
+        Edge* e1 = ( *f )->FindEdge( n1, n2 );
+        Edge* e2 = ( *f )->FindEdge( n2, n0 );
+
+        // Get split data for existing edges.
+        splitData sd0 = splitEdgeMap[ e0 ];
+        splitData sd1 = splitEdgeMap[ e1 ];
+        splitData sd2 = splitEdgeMap[ e2 ];
+
+        // Construct edges from edge split to tri center.
+        Edge* em0 = AddEdge( sd0.ns, ncen );
+        Edge* em1 = AddEdge( sd1.ns, ncen );
+        Edge* em2 = AddEdge( sd2.ns, ncen );
+
+        // Determine which half of split edge is used with node 0
+        Edge *ea, *eb;
+        ea = sd0.es0;
+        if ( !ea->ContainsNode( n0 ) )
+            ea = sd0.es1;
+
+        eb = sd2.es0;
+        if ( !eb->ContainsNode( n0 ) )
+            eb = sd2.es1;
+
+        // Add quad starting at node 0
+        AddFace( n0, sd0.ns, ncen, sd2.ns, ea, em0, em2, eb );
+
+        // Determine which half of split edge is used with node 1
+        ea = sd1.es0;
+        if ( !ea->ContainsNode( n1 ) )
+            ea = sd1.es1;
+
+        eb = sd0.es0;
+        if ( !eb->ContainsNode( n1 ) )
+            eb = sd0.es1;
+
+        // Add quad starting at node 1
+        AddFace( n1, sd1.ns, ncen, sd0.ns, ea, em1, em0, eb );
+
+        // Determine which half of split edge is used with node 2
+        ea = sd2.es0;
+        if ( !ea->ContainsNode( n2 ) )
+            ea = sd2.es1;
+
+        eb = sd1.es0;
+        if ( !eb->ContainsNode( n2 ) )
+            eb = sd1.es1;
+
+        // Add quad starting at node 2
+        AddFace( n2, sd2.ns, ncen, sd1.ns, ea, em2, em1, eb );
+    }
+
+    // Clean up edges and tris.
+    for ( list< Edge* >::iterator e = origEdgeList.begin() ; e != origEdgeList.end(); ++e )
+    {
+        RemoveEdge( *e );
+    }
+
+    for ( list< Face* >::iterator f = origFaceList.begin() ; f != origFaceList.end(); ++f )
+    {
+        RemoveFace( *f );
+    }
+
+    DumpGarbage();
 }
 
 /*

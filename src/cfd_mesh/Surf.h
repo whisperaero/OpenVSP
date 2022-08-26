@@ -30,7 +30,6 @@
 using namespace std;
 
 class SurfaceIntersectionSingleton;
-class CfdMeshMgrSingleton;
 class SCurve;
 class ISegChain;
 
@@ -48,6 +47,7 @@ public:
 
     vec3d CompPnt( double u, double w ) const;
     vec3d CompPnt01( double u, double w ) const;
+    vec3d CompNorm( double u, double w ) const;
 
     const SurfCore* GetSurfCore() const
     {
@@ -154,7 +154,6 @@ public:
 
     void Intersect( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
     void IntersectLineSeg( vec3d & p0, vec3d & p1, vector< double > & t_vals );
-    void IntersectLineSegMesh( vec3d & p0, vec3d & p1, vector< double > & t_vals );
 
     bool BorderCurveOnSurface( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
     void PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceIntersectionSingleton *MeshMgr );
@@ -174,14 +173,14 @@ public:
         m_PatchVec = pvec;
     }
 
-    void InitMesh( vector< ISegChain* > chains );
+    void InitMesh( vector< ISegChain* > chains, SurfaceIntersectionSingleton *MeshMgr );
 
 
     void BuildDistMap();
     double GetUScale( double w );
     double GetWScale( double u );
 
-    bool ValidUW( vec2d & uw );
+    bool ValidUW( vec2d & uw, double slop = 1.0e-4 ) const;
 
     bool BorderMatch( Surf* otherSurf );
 
@@ -212,6 +211,32 @@ public:
     {
         return m_SurfCfdType;
     }
+
+    void SetFeaPartSurfNum( int num )
+    {
+        m_FeaPartSurfNum = num;
+    }
+    int GetFeaPartSurfNum()
+    {
+        return m_FeaPartSurfNum;
+    }
+
+    void SetFeaOrientationType( int oType )
+    {
+        m_FeaOrientationType = oType;
+    }
+    int GetFeaOrientationType()
+    {
+        return m_FeaOrientationType;
+    }
+
+    void SetFeaOrientation( vec3d o )
+    {
+        m_FeaOrientation = o;
+    }
+    vec3d GetFeaElementOrientation( double u, double w );
+    vec3d GetFeaElementOrientation( double u, double w, int type, const vec3d & defaultorientation );
+    vec3d GetFeaElementOrientation();
 
     //Getter/Setter Surface VSP TYPE (NORMAL_SURF, WING_SURF, DISK_SURF, PROP_SURF)
     void SetSurfaceVSPType( int surfVspType )
@@ -314,7 +339,10 @@ protected:
     vector< double > m_UScaleMap;
     vector< double > m_WScaleMap;
 
-    int m_FeaPartIndex;
+    int m_FeaPartIndex; // Which FeaPart in the FeaStructure
+    int m_FeaPartSurfNum; // Which surface in the FeaPart
+    int m_FeaOrientationType; // Which orientation type
+    vec3d m_FeaOrientation; // Surface orientation
 
 };
 
